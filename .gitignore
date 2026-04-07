@@ -12,13 +12,17 @@
 .RData
 .Renviron
 
-# State data (real/confidential data folders)
+# State data and development scratch (never push)
 MS/
+dev/
 R/05_TCC_check.R
 
 # Output files
 *.docx
 *.xlsx
 *.pdf
-dev/output/
 *.rds
+*.csv
+*.Rdata
+*.RData
+*.rdata
