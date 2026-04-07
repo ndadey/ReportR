@@ -12,7 +12,7 @@
 .RData
 .Renviron
 
-# State data and development scratch (never push)
+# Development scratch & example data (never push)
 MS/
 dev/
 R/05_TCC_check.R
