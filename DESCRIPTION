@@ -1,0 +1,24 @@
+Package: ReportR
+Title: Repeatable Analysis Pipeline for State Summative Assessment Data
+Version: 0.1.0
+Authors@R: person("Nathan", "Dadey", email = "ndadey@nciea.org", role = c("aut", "cre"))
+Description: Provides a modular, repeatable pipeline for producing annual analysis
+    reports from state summative assessment data. Supports four lines of analysis
+    (general trends, student groups, aggregate school/district, and anomaly detection)
+    and multiple output formats (docx, html, pptx).
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Imports:
+    dplyr (>= 1.1.0),
+    tidyr (>= 1.3.0),
+    ggplot2 (>= 3.4.0),
+    rlang,
+    stats
+Suggests:
+    testthat (>= 3.0.0),
+    devtools,
+    here,
+    flextable,
+    SGPdata

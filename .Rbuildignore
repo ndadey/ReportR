@@ -1,0 +1,24 @@
+# State data (real/confidential)
+^MS$
+^R/05_TCC_check.R
+
+# Development reference scripts and drafts
+^dev$
+
+# Root-level run scripts (not part of the package)
+^04_Anomaly_Analysis\.R$
+
+# Documentation
+^CLAUDE\.md$
+
+# Word lock files and rendered output in templates/
+^inst/templates/~
+^inst/templates/.*\.docx$
+^inst/templates/.*\.html$
+
+# Claude Code memory
+^\.claude$
+
+# RStudio
+^.*\.Rproj$
+^\.Rproj\.user$

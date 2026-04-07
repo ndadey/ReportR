@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"C:/Program Files/R/R-4.4.2/bin/Rscript.exe\" dev/test_outliers.R)",
+      "Bash(\"C:/Program Files/R/R-4.4.2/bin/Rscript.exe\" dev/diagnose_outliers.R)",
+      "Read(//c/Users/NathanDadey/AppData/Local/Temp/claude/c--Users-NathanDadey-CenterforAssessment-Dropbox-Nathan-Dadey-Git-ReportR/031dc57e-5732-4931-914e-ad20a788945a/tasks/**)",
+      "Bash(\"C:/Program Files/R/R-4.4.2/bin/Rscript.exe\" dev/test_outliers_minimal.R)",
+      "Bash('C:/Program Files/R/R-4.4.2/bin/Rscript.exe' -e ':*)",
+      "Bash(\"C:/Program Files/R/R-4.4.2/bin/Rscript.exe\" dev/test_correlations.R)",
+      "Bash(\"C:/Program Files/R/R-4.4.2/bin/Rscript.exe\" -e \"devtools::document\\(\\); devtools::check\\(\\)\")",
+      "Bash(\"C:/Program Files/R/R-4.4.2/bin/Rscript.exe\" dev/test_distributions.R)",
+      "Bash(powershell -Command \"Test-Path 'c:\\\\Users\\\\NathanDadey\\\\CenterforAssessment Dropbox\\\\Nathan Dadey\\\\Git\\\\ReportR\\\\R\\\\05_TCC_check.R'\")",
+      "Bash(powershell -Command \"Remove-Item 'c:\\\\Users\\\\NathanDadey\\\\CenterforAssessment Dropbox\\\\Nathan Dadey\\\\Git\\\\ReportR\\\\R\\\\05_TCC_check.R' -Force\")",
+      "Bash(\"C:/Program Files/R/R-4.4.2/bin/Rscript.exe\" dev/test_correlations2.R)",
+      "Bash(gh auth:*)",
+      "Bash(Rscript -e ':*)"
+    ]
+  }
+}

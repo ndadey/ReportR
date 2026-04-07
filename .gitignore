@@ -1,0 +1,24 @@
+# R package build artifacts
+*.Rcheck/
+*.tar.gz
+*.zip
+
+# RStudio
+.Rproj.user/
+*.Rproj
+
+# R environment
+.Rhistory
+.RData
+.Renviron
+
+# State data (real/confidential data folders)
+MS/
+R/05_TCC_check.R
+
+# Output files
+*.docx
+*.xlsx
+*.pdf
+dev/output/
+*.rds
