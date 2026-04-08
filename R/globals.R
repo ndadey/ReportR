@@ -55,5 +55,12 @@ utils::globalVariables(c(
   "flat_flag", "bimodal_flag", "skewed_flag",
   "bimodality_coefficient", "skewness", "kurtosis",
   "p05", "p25", "p50", "p75", "p95",
-  "YEAR_chr", "flag_counts", "lbl"
+  "YEAR_chr", "flag_counts", "lbl",
+
+  # --- trend: score trend plots ---
+  "mean_val", "sd_val", "lower", "upper",
+  "p25_val", "p50_val", "p75_val",
+
+  # --- trend: proficiency ---
+  "PROFICIENT", "pct_proficient", "n_proficient"
 ))

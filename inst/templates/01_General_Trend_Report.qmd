@@ -1,0 +1,161 @@
+---
+title: "Section 1. General Trend Analysis"
+format:
+  docx:
+    toc: true
+    number-sections: true
+    fig-dpi: 300
+  html:
+    toc: true
+    toc-float: true
+    code-fold: true
+editor: visual
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  pkg_path:     null
+  spec_file:    null
+  results_file: null
+  min_n:        10
+---
+
+```{r setup}
+# pkg_path is the absolute path to the package root, passed by the driver
+# script. This is required because the QMD may render in a temp directory
+# where here::here() cannot locate the DESCRIPTION file.
+pkg_root <- params$pkg_path
+
+# Load package functions.
+# If pkg_root contains a source-level DESCRIPTION + R/ directory (dev mode),
+# use devtools::load_all(). Otherwise the package is installed — use library().
+if (!is.null(pkg_root) &&
+    file.exists(file.path(pkg_root, "DESCRIPTION")) &&
+    file.exists(file.path(pkg_root, "R"))) {
+  devtools::load_all(pkg_root)
+} else {
+  library(ReportR)
+}
+
+# Source the assessment spec — puts assessment_spec in scope.
+spec_path <- if (file.exists(params$spec_file)) {
+  params$spec_file
+} else {
+  file.path(pkg_root, params$spec_file)
+}
+source(spec_path)
+
+# Load pre-computed results from RDS.
+general_trend_results <- readRDS(params$results_file)
+min_n <- general_trend_results$params$min_n
+```
+
+## Introduction
+
+```{r subtitle, results='asis'}
+cat("###", assessment_spec$program$name, "\n")
+```
+
+This section presents general trend findings for `r assessment_spec$program$name`.
+Results are organized into three areas: (1) scale score trends over time,
+(2) proficiency trends, and (3) score distribution patterns. All analyses
+exclude cells with fewer than `r min_n` students.
+
+---
+
+## Scale Score Trends
+
+### Mean Scale Scores Over Time
+
+```{r score-narrative, results='asis'}
+cat(general_trend_results$score_trends$text$narrative)
+```
+
+```{r score-table}
+tbl <- general_trend_results$score_trends$table
+
+flextable::flextable(tbl) |>
+  flextable::bold(part = "header") |>
+  flextable::fontsize(size = 9, part = "all") |>
+  flextable::set_table_properties(layout = "autofit", width = 1)
+```
+
+```{r mean-trend-plot, fig.width=9, fig.height=4}
+general_trend_results$score_trends$plot$mean_trend
+```
+
+```{r mean-sd-plot, fig.width=9, fig.height=4}
+general_trend_results$score_trends$plot$mean_sd
+```
+
+### Grade-Level Score Profiles
+
+```{r grade-profile-plot, fig.width=9, fig.height=4}
+general_trend_results$score_trends$plot$grade_profile
+```
+
+```{r median-iqr-plot, fig.width=9, fig.height=4}
+if (!is.null(general_trend_results$score_trends$plot$median_iqr)) {
+  general_trend_results$score_trends$plot$median_iqr
+}
+```
+
+---
+
+## Proficiency Trends
+
+### Percent Proficient Over Time
+
+```{r prof-narrative, results='asis'}
+cat(general_trend_results$proficiency$text$narrative)
+```
+
+```{r prof-table}
+prof_tbl <- general_trend_results$proficiency$table
+
+display_tbl <- prof_tbl |>
+  dplyr::mutate(
+    pct_proficient = round(pct_proficient, 1),
+    GRADE = paste0("Grade ", GRADE)
+  ) |>
+  dplyr::arrange(SUBJECT, GRADE, YEAR)
+
+flextable::flextable(display_tbl) |>
+  flextable::bold(part = "header") |>
+  flextable::fontsize(size = 9, part = "all") |>
+  flextable::merge_v(j = c("SUBJECT", "GRADE")) |>
+  flextable::set_table_properties(layout = "autofit", width = 1)
+```
+
+```{r prof-trend-plot, fig.width=9, fig.height=4}
+general_trend_results$proficiency$plot$trend
+```
+
+### Proficiency Heatmap
+
+```{r prof-heatmap-plot, fig.width=9, fig.height=4}
+general_trend_results$proficiency$plot$heatmap
+```
+
+---
+
+## Scale Score Distributions
+
+### Distribution Shifts Over Time
+
+```{r density-narrative, results='asis'}
+cat(general_trend_results$distributions$text$narrative)
+```
+
+```{r density-plots, fig.width=10, fig.height=3, results='asis'}
+density_plots <- general_trend_results$distributions$plot$density
+
+for (subj in names(density_plots)) {
+  p <- density_plots[[subj]]
+  if (!is.null(p)) {
+    print(p)
+    cat("\n\n")
+  }
+}
+```

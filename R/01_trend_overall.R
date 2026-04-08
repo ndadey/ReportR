@@ -221,3 +221,315 @@ mean_sd_table_wide <- function(student_results_long,
     min_n                = min_n
   )[["ScaleScore_Stats_Report"]]
 }
+
+
+# ==============================================================================
+# plot_score_trends()
+# ==============================================================================
+
+#' Create trend plots from a score summary
+#'
+#' Produces four ggplot objects visualising scale score trends over time:
+#' mean trends, mean with SD bands, median with IQR bands, and grade-level
+#' profiles. All plots are faceted by subject using labels from
+#' `assessment_spec`.
+#'
+#' @param score_summary Named list returned by [compute_score_summary()].
+#' @param assessment_spec Named list describing the assessment program.
+#'
+#' @return A named list with four ggplot elements:
+#'   * `$mean_trend` — mean per grade over time, faceted by subject
+#'   * `$mean_sd` — mean ± 1 SD bands, faceted by subject
+#'   * `$median_iqr` — median with IQR bands, faceted by subject
+#'   * `$grade_profile` — grade on x-axis, year as colour, faceted by subject
+#' @export
+#' @examples
+#' \dontrun{
+#' source(system.file("specs/00_DEMO_Assessment_Spec.R", package = "ReportR"))
+#' ss <- compute_score_summary(demo_data, assessment_spec)
+#' plots <- plot_score_trends(ss, assessment_spec)
+#' plots$mean_trend
+#' }
+plot_score_trends <- function(score_summary, assessment_spec) {
+  stopifnot(
+    is.list(score_summary),
+    !is.null(score_summary$ScaleScore_Stats_Wide),
+    !is.null(score_summary$ScaleScore_Stats_Long),
+    is.list(assessment_spec)
+  )
+
+  # Subject label lookup
+  subj_lookup <- data.frame(
+    SUBJECT    = names(assessment_spec$subjects),
+    subj_label = vapply(names(assessment_spec$subjects),
+                        function(s) assessment_spec$subjects[[s]]$label,
+                        character(1)),
+    stringsAsFactors = FALSE
+  )
+
+  wide <- score_summary$ScaleScore_Stats_Wide
+  long <- score_summary$ScaleScore_Stats_Long
+
+  # Attach subject labels and order GRADE
+  wide <- wide |>
+    dplyr::left_join(subj_lookup, by = "SUBJECT") |>
+    dplyr::mutate(
+      subj_label = dplyr::coalesce(.data[["subj_label"]], .data[["SUBJECT"]]),
+      grade_lbl  = factor(
+        paste0("Grade ", as.integer(.data[["GRADE"]])),
+        levels = paste0("Grade ", sort(unique(as.integer(.data[["GRADE"]]))))
+      ),
+      YEAR_chr   = as.character(.data[["YEAR"]])
+    )
+
+  long <- long |>
+    dplyr::left_join(subj_lookup, by = "SUBJECT") |>
+    dplyr::mutate(
+      subj_label = dplyr::coalesce(.data[["subj_label"]], .data[["SUBJECT"]]),
+      grade_lbl  = factor(
+        paste0("Grade ", as.integer(.data[["GRADE"]])),
+        levels = paste0("Grade ", sort(unique(as.integer(.data[["GRADE"]]))))
+      ),
+      YEAR_chr   = as.character(.data[["YEAR"]])
+    )
+
+  # ---- 1. Mean trend ----
+  d_mean <- long |> dplyr::filter(.data[["metric"]] == "mean")
+
+  p_mean <- ggplot2::ggplot(
+    d_mean,
+    ggplot2::aes(x = YEAR_chr, y = value, group = grade_lbl, color = grade_lbl)
+  ) +
+    ggplot2::geom_line() +
+    ggplot2::geom_point() +
+    ggplot2::facet_wrap(~ subj_label, nrow = 1) +
+    ggplot2::labs(x = NULL, y = "Mean Scale Score", color = "Grade") +
+    ggplot2::theme_bw() +
+    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+
+  # ---- 2. Mean ± SD bands ----
+  d_meansd <- wide |>
+    dplyr::select(dplyr::all_of(c("YEAR", "YEAR_chr", "SUBJECT", "subj_label",
+                                   "GRADE", "grade_lbl", "mean", "sd"))) |>
+    dplyr::filter(!is.na(.data[["mean"]]), !is.na(.data[["sd"]])) |>
+    dplyr::rename(mean_val = "mean", sd_val = "sd") |>
+    dplyr::mutate(
+      lower = .data[["mean_val"]] - .data[["sd_val"]],
+      upper = .data[["mean_val"]] + .data[["sd_val"]]
+    )
+
+  p_meansd <- ggplot2::ggplot(
+    d_meansd,
+    ggplot2::aes(x = YEAR_chr, y = mean_val,
+                 group = grade_lbl, color = grade_lbl, fill = grade_lbl)
+  ) +
+    ggplot2::geom_ribbon(ggplot2::aes(ymin = lower, ymax = upper),
+                         alpha = 0.15, color = NA) +
+    ggplot2::geom_line() +
+    ggplot2::geom_point() +
+    ggplot2::facet_wrap(~ subj_label, nrow = 1) +
+    ggplot2::labs(x = NULL, y = "Scale Score", color = "Grade", fill = "Grade") +
+    ggplot2::theme_bw() +
+    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+
+  # ---- 3. Median with IQR ----
+  has_iqr <- all(c("p25", "p50", "p75") %in% names(wide))
+
+  if (has_iqr) {
+    d_iqr <- wide |>
+      dplyr::select(dplyr::all_of(c("YEAR", "YEAR_chr", "SUBJECT", "subj_label",
+                                     "GRADE", "grade_lbl", "p25", "p50", "p75"))) |>
+      dplyr::filter(!is.na(.data[["p50"]])) |>
+      dplyr::rename(p25_val = "p25", p50_val = "p50", p75_val = "p75")
+
+    p_iqr <- ggplot2::ggplot(
+      d_iqr,
+      ggplot2::aes(x = YEAR_chr, y = p50_val,
+                   group = grade_lbl, color = grade_lbl, fill = grade_lbl)
+    ) +
+      ggplot2::geom_ribbon(ggplot2::aes(ymin = p25_val, ymax = p75_val),
+                           alpha = 0.15, color = NA) +
+      ggplot2::geom_line() +
+      ggplot2::geom_point() +
+      ggplot2::facet_wrap(~ subj_label, nrow = 1) +
+      ggplot2::labs(x = NULL, y = "Scale Score", color = "Grade", fill = "Grade") +
+      ggplot2::theme_bw() +
+      ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+  } else {
+    p_iqr <- NULL
+  }
+
+  # ---- 4. Grade profile (grade on x, year as color) ----
+  d_profile <- long |>
+    dplyr::filter(.data[["metric"]] == "mean", !is.na(.data[["value"]]))
+
+  p_profile <- ggplot2::ggplot(
+    d_profile,
+    ggplot2::aes(x = grade_lbl, y = value,
+                 group = YEAR_chr, color = YEAR_chr)
+  ) +
+    ggplot2::geom_line() +
+    ggplot2::geom_point() +
+    ggplot2::facet_wrap(~ subj_label, nrow = 1) +
+    ggplot2::labs(x = NULL, y = "Mean Scale Score", color = "Year") +
+    ggplot2::theme_bw() +
+    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+
+  list(
+    mean_trend    = p_mean,
+    mean_sd       = p_meansd,
+    median_iqr    = p_iqr,
+    grade_profile = p_profile
+  )
+}
+
+
+# ==============================================================================
+# summarize_score_trends()
+# ==============================================================================
+
+#' Summarize score trends in plain text
+#'
+#' Computes first-to-last year mean changes by subject and grade and generates
+#' a narrative markdown summary.
+#'
+#' @param score_summary Named list returned by [compute_score_summary()].
+#' @param assessment_spec Named list describing the assessment program.
+#'
+#' @return A named list:
+#'   * `$table` — `ScaleScore_Stats_Report` data frame
+#'   * `$by_subject` — named list of per-subject narrative strings
+#'   * `$narrative` — markdown bullet list summarising key changes
+#' @export
+#' @examples
+#' \dontrun{
+#' source(system.file("specs/00_DEMO_Assessment_Spec.R", package = "ReportR"))
+#' ss <- compute_score_summary(demo_data, assessment_spec)
+#' summarize_score_trends(ss, assessment_spec)$narrative
+#' }
+summarize_score_trends <- function(score_summary, assessment_spec) {
+  stopifnot(
+    is.list(score_summary),
+    !is.null(score_summary$ScaleScore_Stats_Wide),
+    is.list(assessment_spec)
+  )
+
+  subj_lookup <- data.frame(
+    SUBJECT    = names(assessment_spec$subjects),
+    subj_label = vapply(names(assessment_spec$subjects),
+                        function(s) assessment_spec$subjects[[s]]$label,
+                        character(1)),
+    stringsAsFactors = FALSE
+  )
+
+  wide <- score_summary$ScaleScore_Stats_Wide |>
+    dplyr::left_join(subj_lookup, by = "SUBJECT") |>
+    dplyr::mutate(
+      subj_label = dplyr::coalesce(.data[["subj_label"]], .data[["SUBJECT"]])
+    )
+
+  subjects <- unique(wide[["SUBJECT"]])
+  by_subject <- vector("list", length(subjects))
+  names(by_subject) <- subjects
+
+  for (s in subjects) {
+    d_s  <- wide |>
+      dplyr::filter(.data[["SUBJECT"]] == s) |>
+      dplyr::arrange(.data[["YEAR"]])
+
+    lbl  <- unique(d_s[["subj_label"]])[1]
+    yrs  <- sort(unique(d_s[["YEAR"]]))
+
+    if (length(yrs) < 2) {
+      by_subject[[s]] <- paste0("Only one year of data available for ", lbl, ".")
+      next
+    }
+
+    first_yr <- yrs[1]
+    last_yr  <- yrs[length(yrs)]
+
+    d_first <- d_s |> dplyr::filter(.data[["YEAR"]] == first_yr)
+    d_last  <- d_s |> dplyr::filter(.data[["YEAR"]] == last_yr)
+
+    changes <- dplyr::inner_join(
+      d_first |> dplyr::select("GRADE", mean_first = "mean"),
+      d_last  |> dplyr::select("GRADE", mean_last  = "mean"),
+      by = "GRADE"
+    ) |>
+      dplyr::mutate(delta = .data[["mean_last"]] - .data[["mean_first"]]) |>
+      dplyr::filter(!is.na(.data[["delta"]]))
+
+    if (nrow(changes) == 0) {
+      by_subject[[s]] <- paste0("Insufficient data to compute changes for ", lbl, ".")
+      next
+    }
+
+    overall_delta <- mean(changes[["delta"]], na.rm = TRUE)
+    direction     <- if (overall_delta > 0) "increased" else "decreased"
+    by_subject[[s]] <- paste0(
+      lbl, ": mean scores ", direction, " by an average of ",
+      round(abs(overall_delta), 1), " points from ", first_yr, " to ", last_yr,
+      " across ", nrow(changes), " grade(s)."
+    )
+  }
+
+  bullets <- paste0("- ", unlist(by_subject), collapse = "\n")
+  narrative <- paste0(
+    "The following summarizes changes in mean scale scores from the first to ",
+    "the last reported year:\n\n", bullets
+  )
+
+  list(
+    table      = score_summary$ScaleScore_Stats_Report,
+    by_subject = by_subject,
+    narrative  = narrative
+  )
+}
+
+
+# ==============================================================================
+# run_score_trends()
+# ==============================================================================
+
+#' Run the Line 1 score trends sub-analysis
+#'
+#' Computes distributional score summaries, generates trend plots, and
+#' produces narrative text. This is the primary score trends sub-analysis
+#' for Line 1 (General Trend Analysis).
+#'
+#' @param student_results_long A long-format student results data frame
+#'   (see data contract).
+#' @param assessment_spec Named list describing the assessment program.
+#' @param min_n Integer. Minimum group size for small-n suppression. Default
+#'   `10`.
+#'
+#' @return A named list:
+#'   * `$table` — `ScaleScore_Stats_Report` wide table
+#'   * `$plot` — list of ggplots: `$mean_trend`, `$mean_sd`, `$median_iqr`,
+#'     `$grade_profile`
+#'   * `$text` — list: `$narrative`, `$by_subject`, `$table`
+#' @export
+#' @examples
+#' \dontrun{
+#' source(system.file("specs/00_DEMO_Assessment_Spec.R", package = "ReportR"))
+#' out <- run_score_trends(demo_data, assessment_spec)
+#' out$plot$mean_trend
+#' }
+run_score_trends <- function(student_results_long,
+                             assessment_spec,
+                             min_n = 10) {
+  stopifnot(
+    is.data.frame(student_results_long),
+    is.list(assessment_spec)
+  )
+
+  ss   <- compute_score_summary(student_results_long, assessment_spec, min_n = min_n)
+  plt  <- plot_score_trends(ss, assessment_spec)
+  txt  <- summarize_score_trends(ss, assessment_spec)
+
+  list(
+    table = ss$ScaleScore_Stats_Report,
+    plot  = plt,
+    text  = txt
+  )
+}
