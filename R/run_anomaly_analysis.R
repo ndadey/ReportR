@@ -105,5 +105,15 @@ run_anomaly_analysis <- function(student_results_long,
     point_adjust         = point_adjust
   )
 
+  # Store run parameters so the report can reference them without calling
+  # formals() on the function (which fails when the package is installed).
+  anomaly_results$params <- list(
+    point_adjust    = point_adjust,
+    min_n           = min_n,
+    mild_thresh     = mild_thresh,
+    moderate_thresh = moderate_thresh,
+    severe_thresh   = severe_thresh
+  )
+
   anomaly_results
 }

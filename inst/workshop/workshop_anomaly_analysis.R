@@ -19,12 +19,15 @@
 library(ReportR)
 library(SGPdata)
 library(dplyr)
+library(quarto)
 
 # -- 1a. Load and standardize student data ------------------------------------
 #
 # standardize_student_results() renames columns to the canonical names used
 # throughout the package (e.g. CONTENT_AREA -> SUBJECT, SS -> SCALE_SCORE)
-# and converts "YYYY_YYYY" year strings to integers.
+# and converts "YYYY_YYYY" year strings to integers. The 
+# standardize_student_results() function is not comprehensive, but is mean to help
+# with cleaning, at least a little. 
 
 student_results_long <- sgpData_LONG |>
   filter(VALID_CASE == "VALID_CASE") |>
@@ -67,7 +70,7 @@ anomaly_results <- run_anomaly_analysis(
   min_n                = 10
 )
 
-# Explore the results interactively before rendering the report
+# Explore the results before rendering the report
 anomaly_results$loss_hoss$table
 anomaly_results$loss_hoss$plot_hoss_cleveland
 anomaly_results$outliers$text$narrative
@@ -83,31 +86,34 @@ saveRDS(anomaly_results, "output/anomaly_results.rds")
 # STEP 3: Output via the Quarto Anomaly Analysis Report
 # =============================================================================
 
-library(quarto)
-
-# Copy the report template to your working directory so you can edit it
+# Copy the report template to your working directory so you can edit it.
+# Alternatively, you could run directly from the ist/templates within the
+# package directory (which can be found in 
 file.copy(
   system.file("templates/04_Anomaly_Report.qmd", package = "ReportR"),
   "04_Anomaly_Report.qmd",
   overwrite = FALSE   # set TRUE to overwrite if you already have a copy
 )
 
-# Render the report to Word (.docx)
+# Render the report to HTML or Word (.docx)
 # pkg_path tells the report where the package lives so it can load functions.
 # spec_file points to the assessment spec.
 # results_file points to the saved RDS from Step 2.
 
 quarto::quarto_render(
   input         = "04_Anomaly_Report.qmd",
-  output_format = "docx",
+                  #"inst/templates/04_Anomaly_Report.qmd",
+  output_format = "html", #"docx",
+  output_file   = "04_Anomaly_Report.html",
   execute_params = list(
     pkg_path     = find.package("ReportR"),
     spec_file    = system.file("specs/00_DEMO_Assessment_Spec.R",
-                               package = "ReportR"),
+                              package = "ReportR"),
     results_file = file.path(getwd(), "output/anomaly_results.rds"),
     min_n        = 10L
   )
 )
 
-# The report will be saved as 04_Anomaly_Report.docx in your working directory.
+# The report will be saved as 04_Anomaly_Report.html or 04_Anomaly_Report.docx 
+#in your working directory.
 message("Done! Open 04_Anomaly_Report.docx to view the report.")

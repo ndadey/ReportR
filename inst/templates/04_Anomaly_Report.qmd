@@ -27,12 +27,27 @@ params:
 # where here::here() cannot locate the DESCRIPTION file.
 pkg_root <- params$pkg_path
 
-# Load package functions (puts all R/ functions in scope)
-devtools::load_all(pkg_root)
+# Load package functions.
+# If pkg_root contains a source-level DESCRIPTION + R/ directory (dev mode),
+# use devtools::load_all(). Otherwise the package is installed — use library().
+if (!is.null(pkg_root) &&
+    file.exists(file.path(pkg_root, "DESCRIPTION")) &&
+    file.exists(file.path(pkg_root, "R"))) {
+  devtools::load_all(pkg_root)
+} else {
+  library(ReportR)
+}
 
 # Source the assessment spec — puts assessment_spec in scope.
 # assessment_spec is used directly throughout the report body.
-source(file.path(pkg_root, params$spec_file))
+# spec_file may be a full absolute path (e.g. from system.file()) or a path
+# relative to pkg_root — handle both.
+spec_path <- if (file.exists(params$spec_file)) {
+  params$spec_file
+} else {
+  file.path(pkg_root, params$spec_file)
+}
+source(spec_path)
 
 # Load pre-computed results from RDS.
 anomaly_results <- readRDS(params$results_file)
@@ -50,7 +65,7 @@ This section conducts a series of diagnostic checks to identify **potential scor
 
 ### Potential Ceiling and Floor Effects
 
-Students scoring at or very near the highest obtainable scale score (HOSS) or lowest obtainable scale score (LOSS) may warrant further investigation. This section reports the percentage of students scoring within `r formals(run_anomaly_analysis)$point_adjust` points of either boundary for each year–grade–subject combination.
+Students scoring at or very near the highest obtainable scale score (HOSS) or lowest obtainable scale score (LOSS) may warrant further investigation. This section reports the percentage of students scoring within `r anomaly_results$params$point_adjust` points of either boundary for each year–grade–subject combination.
 
 ```{r loss-hoss-narrative, results='asis'}
 cat(anomaly_results$loss_hoss$text$narrative, sep = "\n\n")
@@ -120,7 +135,7 @@ This section screens each year × subject × grade combination for unusual score
 
 ### Score Distribution Plots
 
-Each panel shows overlaid score density curves for all years within a subject–grade combination. The x-axis is bounded to the LOSS–HOSS range. The red dashed line marks the HOSS; the blue dashed line marks the LOSS. Grey vertical lines show achievement level cut scores. Each panel includes per-year statistics: percentage of students within `r formals(run_anomaly_analysis)$point_adjust` points of the HOSS (↑HOSS) and LOSS (↓LOSS), skewness, and Sarle's bimodality coefficient (BC).
+Each panel shows overlaid score density curves for all years within a subject–grade combination. The x-axis is bounded to the LOSS–HOSS range. The red dashed line marks the HOSS; the blue dashed line marks the LOSS. Grey vertical lines show achievement level cut scores. Each panel includes per-year statistics: percentage of students within `r anomaly_results$params$point_adjust` points of the HOSS (↑HOSS) and LOSS (↓LOSS), skewness, and Sarle's bimodality coefficient (BC).
 
 ```{r dist-plots, fig.width=9, fig.height=5, results='asis'}
 dist_plots <- anomaly_results$loss_hoss$plot_distributions

@@ -7,7 +7,7 @@
 plot_loss_hoss_cleveland(
   loss_hoss_table,
   metric = c("hoss", "loss"),
-  point_size = 2.5
+  point_size = 3
 )
 }
 \arguments{
@@ -15,14 +15,17 @@ plot_loss_hoss_cleveland(
 
 \item{metric}{Character. \code{"hoss"} (default) or \code{"loss"}.}
 
-\item{point_size}{Numeric. Size of plotted points. Default \code{2.5}.}
+\item{point_size}{Numeric. Size of plotted points. Default \code{3}.}
 }
 \value{
 A \code{ggplot} object.
 }
 \description{
 Displays the percentage of students near the LOSS or HOSS boundary for each
-grade, with points coloured by year. Faceted by subject.
+grade (y-axis), with years differentiated by colour. A horizontal line spans
+the min–max range across years for each grade to show year-to-year movement.
+Faceted by subject with subjects arranged as columns so the plot stays
+page-width and fits comfortably on a portrait page.
 }
 \examples{
 \dontrun{

@@ -35,6 +35,11 @@ Each line of analysis follows the same three-step workflow:
 All R files live flat in `R/` (R packages do not auto-load subdirectories).
 The `dev/` folder contains test scripts and prompt files — not part of the package.
 
+The package is on GitHub at **github.com/ndadey/ReportR** and can be installed with:
+```r
+devtools::install_github("ndadey/ReportR")
+```
+
 ### What is complete
 
 | File | Status | Notes |
@@ -54,25 +59,24 @@ The `dev/` folder contains test scripts and prompt files — not part of the pac
 | `inst/specs/00_MS_Assessment_Spec.R` | ✅ Complete | Mississippi MAAP (5 levels) — reference implementation |
 | `inst/specs/00_DEMO_Assessment_Spec.R` | ✅ Complete | SGPdata demo (4 levels) — primary runnable example |
 | `inst/specs/00_TEMPLATE_Spec.R` | ✅ Complete | Blank template for new states |
+| `inst/workshop/workshop_anomaly_analysis.R` | ✅ Complete | Step-by-step workshop script for Line 4 |
+| `README.md` | ✅ Complete | Install instructions, quick start, package overview |
 
 ### What is not yet built
 
 - Lines 1 (remaining functions), 2, and 3 analysis functions
 - `run_trend_analysis.R`, `run_group_analysis.R`, `run_aggregate_analysis.R` orchestrators
 - `inst/templates/` for Lines 1, 2, 3
-- GitHub repo and `README.md` (next step before sharing)
 
 ---
 
 ## 3. Core Workflow
 
 ### Step 1: Setup
-- The Quarto document calls `devtools::load_all(here::here())` to load all package
-  functions, then sources the assessment spec via `params$setup_file`
-- Data is loaded into `student_results_long` inside the setup file and passed through
-  `standardize_student_results()` to canonicalize column names
-- `here::here()` is used for all paths to ensure correct resolution regardless of
-  render location
+- User sources an assessment spec file (e.g. `inst/specs/00_DEMO_Assessment_Spec.R`)
+  which puts `assessment_spec` in scope
+- Data is loaded and passed through `standardize_student_results()` to canonicalize
+  column names
 
 ### Step 2: Modular Analysis (one orchestrator per line of analysis)
 Each `run_*_analysis()` orchestrator:
@@ -80,17 +84,51 @@ Each `run_*_analysis()` orchestrator:
 2. Returns a named results list (e.g., `anomaly_results`)
 3. Each sub-list contains: `$table` (data frame), `$plot` or `$plot_*` (ggplot objects),
    `$text` (list with at minimum `$narrative`)
+4. Results are saved to RDS via `saveRDS()` for use in the report
 
 ### Step 3: Reports
-- The orchestrator is called **once** in the setup chunk of the `.qmd` — all subsequent
-  chunks only read from the returned object, never re-run analysis
+- The QMD reads pre-computed results from RDS — analysis never re-runs inside the QMD
+- `assessment_spec` is sourced directly in the QMD setup chunk (needed for labels/titles)
 - The rendered `.docx` (primary) + `.html` is the deliverable
 - `flextable` is used for all Word-compatible formatted tables
 - Narrative text is pulled from `$text$narrative` — never written inline in the `.qmd`
 
+### Driver scripts
+- `MS/run_anomaly_report.R` — MS data driver (real state data)
+- `dev/run_anomaly_report_demo.R` — SGPdata demo driver
+- Both scripts: load data → run analysis → saveRDS → copy QMD to tempdir → render → copy .docx to output
+
+The tempdir render pattern is required because Dropbox locks intermediate files that
+Quarto tries to clean up. The QMD is copied to `tempdir()` before rendering.
+
 ---
 
-## 4. The `assessment_spec` Object
+## 4. QMD Params Pattern
+
+The QMD no longer uses a `setup_file` param. Instead:
+
+```yaml
+params:
+  pkg_path:     null   # absolute path to package root (for devtools::load_all)
+  spec_file:    null   # path to spec file, relative to pkg_path
+  results_file: null   # absolute path to pre-computed RDS
+  min_n:        10
+```
+
+**`pkg_path`** is a development-only workaround — `devtools::load_all(pkg_path)` needs
+to find `DESCRIPTION`. Once the package is installed by end users, the setup chunk
+becomes `library(ReportR)` and `pkg_path` is no longer needed.
+
+**`spec_file`** is relative to `pkg_path` (e.g. `"inst/specs/00_DEMO_Assessment_Spec.R"`).
+With an installed package, users pass the output of `system.file(...)` directly.
+
+**`results_file`** is an absolute path. Driver scripts pass the already-resolved variable
+(e.g. `results_file`) not a relative string, to avoid path resolution issues inside
+the temp render directory.
+
+---
+
+## 5. The `assessment_spec` Object
 
 This is the central configuration object. It is a named R list defined in a
 `00_<STATE>_Assessment_Spec.R` file. All analysis functions must accept
@@ -178,7 +216,7 @@ assessment_spec <- list(
 
 ---
 
-## 5. Data Contract: `student_results_long`
+## 6. Data Contract: `student_results_long`
 
 After calling `standardize_student_results()`, the expected column names are:
 
@@ -200,13 +238,17 @@ After calling `standardize_student_results()`, the expected column names are:
 | `IEP`              | character | Binary demographic                             |
 | `GENDER`           | character |                                                |
 
-`standardize_student_results()` (in `R/setup_format_data.R`) handles messy incoming
-column names via `rename_if_exists()`. It also converts `YYYY_YYYY` academic-year
-strings (e.g. `"2015_2016"`) to the end year integer (`2016`).
+**Critical:** Always standardize before filtering by year. `sgpData_LONG` uses
+`YYYY_YYYY` strings — filtering by integer year before `standardize_student_results()`
+will return 0 rows. Correct order:
+
+```r
+data |> filter(VALID_CASE == "VALID_CASE") |> standardize_student_results() |> filter(YEAR %in% 2016:2019)
+```
 
 ---
 
-## 6. Line 4: Score Quality Analysis — Implemented Sub-analyses
+## 7. Line 4: Score Quality Analysis — Implemented Sub-analyses
 
 Line 4 is the most complete module and is the canonical template for all other lines.
 The orchestrator is `run_anomaly_analysis()` in `R/run_anomaly_analysis.R`.
@@ -225,8 +267,9 @@ unified score distribution plots contain both HOSS/LOSS and shape statistics.
 **`run_loss_hoss()` returns:**
 - `$table` — pct near HOSS/LOSS by YEAR × SUBJECT × GRADE, with `pct_near_hoss_change`
   and `pct_near_loss_change` delta columns; severity flags (None/Mild/Moderate/Severe)
-- `$plot_hoss_cleveland`, `$plot_loss_cleveland` — Cleveland dot plots: years on y-axis
-  (nested within grade), dotted leader lines from x=0 to each point, grade as colour
+- `$plot_hoss_cleveland`, `$plot_loss_cleveland` — Cleveland dot plots: grade on y-axis,
+  year as colour, horizontal range line showing min–max across years, faceted by subject
+  as columns. Returns an informative blank plot if no data.
 - `$plot_hoss_heat`, `$plot_loss_heat` — heatmaps (computed but not shown in current QMD)
 - `$plot_hoss_line`, `$plot_loss_line` — trend lines (computed but not shown in current QMD)
 - `$plot_distributions` — **flat** named list of ggplot objects, one per subject/grade
@@ -288,7 +331,8 @@ Grade G+1 score in year T+1. Each row represents one SUBJECT × grade-pair × ye
   `GRADE_1`, `GRADE_2`, `n`, `correlation` (Spearman, NA if `n < min_n`),
   `low_flag` (< 0.5), `drop_flag` (> 0.15 drop from prior year-pair)
 - `$plot` — `$line` (grade-pair lines over year-pairs, faceted by subject) and
-  `$heatmap` (diverging fill anchored at 0.7)
+  `$heatmap` (diverging fill anchored at 0.7). Subject labels use `left_join` against
+  a lookup data frame — not `dplyr::recode(!!!)`
 - `$text` — `$narrative`, `$wide_table` (Subject + Grade Pair rows, interleaved
   Correlation/N columns per year-pair), `$by_subject`, `$table`
 
@@ -311,9 +355,14 @@ Grade G+1 score in year T+1. Each row represents one SUBJECT × grade-pair × ye
 **Flagging thresholds:** Bimodal = BC > 0.555, Skewed = |skewness| > 1.0,
 Flat = SD < 0.25 × (HOSS − LOSS). Priority: Bimodal > Skewed > Flat.
 
+**Known fix:** `mapply(.bimodality_coeff, ...)` returns a list when any element is
+`NA_real_`. Always wrap with `as.numeric(mapply(...))`. Small-n suppression uses
+base-R row indexing (`tbl[small, cols] <- NA_real_`), not `dplyr::across()` +
+`dplyr::if_else()`, because the latter cannot assign `NA_real_` into a list column.
+
 ---
 
-## 7. Report Structure: `inst/templates/04_Anomaly_Report.qmd`
+## 8. Report Structure: `inst/templates/04_Anomaly_Report.qmd`
 
 The QMD is titled **"Section 4. Score Quality Analysis"**. Section numbering uses
 Quarto's `number-sections: true`. The major sections are:
@@ -321,8 +370,7 @@ Quarto's `number-sections: true`. The major sections are:
 1. **Introduction**
 2. **Score Distribution Patterns** *(combines HOSS/LOSS and distribution diagnostics)*
    - 2.1 Potential Ceiling and Floor Effects — narrative, summary table, Cleveland plots
-   - 2.2 Score Distribution Shape — narrative, distribution shape statistics table (all
-     grades/subjects, columns: Year, Subject, Grade, N, Mean, SD, Skewness, Bimodality)
+   - 2.2 Score Distribution Shape — narrative only (no table)
    - 2.3 Score Distribution Plots — unified density plots from `plot_distributions`
 3. **Score Integrity**
 4. **Year-to-Year Outliers** — narrative, delta summary table, flagged cells table, plots
@@ -331,22 +379,24 @@ Quarto's `number-sections: true`. The major sections are:
 6. **Distribution Diagnostics** *(shape narrative only — plots in §2)*
 
 **Key QMD conventions:**
-- All analysis runs once in the `setup` chunk via `run_anomaly_analysis()`
+- Setup chunk uses `pkg_path` param for `devtools::load_all()` and `spec_file` for
+  sourcing the spec. `results_file` is an absolute path to the pre-computed RDS.
 - Subsequent chunks only read from `anomaly_results`
 - `flextable` for all tables; `merge_v()` used for Subject/Grade columns where appropriate
+- `fig-dpi: 300` in docx format for print-quality output
 
 ---
 
-## 8. File and Package Structure
-
-### Actual R Package Layout (as built)
+## 9. File and Package Structure
 
 ```
 ReportR/
-├── DESCRIPTION
+├── DESCRIPTION                            ← author: Nathan Dadey <ndadey@nciea.org>
 ├── NAMESPACE
+├── README.md                              ← install instructions + quick start
 ├── CLAUDE.md
-├── .Rbuildignore                          ← excludes dev/, .claude/, Word temp files
+├── .Rbuildignore                          ← excludes dev/, MS/, .claude/, Word temp files
+├── .gitignore                             ← excludes dev/, MS/, *.docx, *.rds, *.csv, *.RData
 ├── R/
 │   ├── setup_format_data.R               ← standardize_student_results()
 │   ├── utils.R                           ← grade_key()
@@ -366,45 +416,22 @@ ReportR/
 │   │   ├── 00_MS_Assessment_Spec.R       ← real spec (MAAP, 5 levels) — reference
 │   │   ├── 00_DEMO_Assessment_Spec.R     ← SGPdata demo (4 levels) — runnable example
 │   │   └── 00_TEMPLATE_Spec.R            ← blank template for new states
-│   └── templates/
-│       └── 04_Anomaly_Report.qmd         ← full report for Line 4 ✅
+│   ├── templates/
+│   │   └── 04_Anomaly_Report.qmd         ← full report for Line 4 ✅
+│   └── workshop/
+│       └── workshop_anomaly_analysis.R   ← step-by-step workshop script ✅
 │
 ├── man/                                  ← roxygen2-generated docs
 ├── tests/
 │   └── testthat/
 │       ├── test-04_anomaly_loss_hoss.R
 │       └── test-01_trend_overall.R
-└── dev/                                  ← not part of package (in .Rbuildignore)
-    ├── prompts/                          ← implementation prompt specs
-    ├── references/                       ← old QMD versions
-    └── test_*.R                          ← manual test scripts
+└── dev/                                  ← not in git or package (excluded by both)
 ```
-
-### Important: R packages do not auto-load subdirectories
-
-All function files must live directly in `R/` — not in subdirectories. Files in
-subdirectories are silently ignored by `devtools::load_all()` and `R CMD check`.
-Use the `NN_module_subsection` filename prefix for organisation instead.
-
-### One file per sub-analysis — the governing rule
-
-Every file in `R/` prefixed with a module number corresponds to exactly one sub-list in
-its results object. The file contains all `compute_*()`, `plot_*()`, `summarize_*()`,
-and `run_*()` functions for that sub-list.
-
-### File naming conventions
-- Analysis function files: `NN_module_subsection.R` (e.g., `04_anomaly_loss_hoss.R`)
-- Orchestrators: `run_<module>_analysis.R`
-- Quarto reports: `NN_Module_Name.qmd` in `inst/templates/`
-- Assessment specs: `00_<STATE>_Assessment_Spec.R` in `inst/specs/`
-
-### Do not edit `dev/` files
-`dev/` is a scratch area for manual testing and reference. Do not modify files there
-unless explicitly asked.
 
 ---
 
-## 9. Coding Conventions
+## 10. Coding Conventions
 
 ### Style
 - **Tidyverse throughout**: use `dplyr`, `tidyr`, `ggplot2`; pipe with `|>` (native pipe)
@@ -413,6 +440,7 @@ unless explicitly asked.
 - `stringsAsFactors = FALSE` always when constructing data frames manually
 - Do **not** use `isTRUE()` on a vector column — use `!is.na(x) & x` instead
 - Do **not** use `dplyr::if_else()` for scalar conditions inside loops — use base R `if/else`
+- Do **not** use `dplyr::recode(!!!list)` — use `left_join()` against a lookup data frame
 
 ### Function signatures
 - `compute_*()` — first two args: `student_results_long`, `assessment_spec`; optional
@@ -443,37 +471,7 @@ Every exported function needs:
 
 ---
 
-## 10. Quarto Report Conventions
-
-### Setup chunk pattern (all templates)
-
-```r
-devtools::load_all(here::here())
-source(here::here(params$setup_file))   # loads assessment_spec and student_results_long
-
-results <- run_*_analysis(
-  student_results_long = student_results_long,
-  assessment_spec      = assessment_spec,
-  report_years         = params$report_years,
-  min_n                = params$min_n
-)
-```
-
-### YAML params pattern
-
-```yaml
-params:
-  setup_file:   "MS/_setup_light.R"   # sources spec + loads data
-  report_years: [2023, 2024, 2025]
-  min_n:        10
-```
-
-- `setup_file` sources both the spec and loads the data, putting `assessment_spec`
-  and `student_results_long` in scope
-- Do not add params for things already in the spec (no `ASSESSMENT_NAME`, etc.)
-- `report_years` and `min_n` are runtime decisions that legitimately live in params
-
-### flextable for Word output
+## 11. flextable for Word output
 All formatted tables in `.qmd` templates must use `flextable` — not `knitr::kable()` —
 for Word-compatible output. Standard pattern:
 
@@ -487,34 +485,15 @@ flextable::flextable(df) |>
 Color-code severity: Severe = `"#f4cccc"` (red), Mild/flagged = `"#fce8b2"` (yellow),
 drops/secondary = `"#f6b26b"` (orange), informational = `"#9fc5e8"` (blue).
 
-### Output formats
-
-**Full analysis report** — `.docx` (primary) + `.html`:
-```yaml
-format:
-  docx:
-    toc: true
-    number-sections: true
-  html:
-    toc: true
-    toc-float: true
-    code-fold: true
-execute:
-  echo: false
-  warning: false
-  message: false
-```
-
 ---
 
-## 11. DESCRIPTION File
-
-Current state of `DESCRIPTION`:
+## 12. DESCRIPTION File
 
 ```
 Package: ReportR
 Title: Repeatable Analysis Pipeline for State Summative Assessment Data
 Version: 0.1.0
+Authors@R: person("Nathan", "Dadey", email = "ndadey@nciea.org", role = c("aut", "cre"))
 Imports:
     dplyr (>= 1.1.0),
     tidyr (>= 1.3.0),
@@ -536,7 +515,7 @@ consequence. `rlang` ships with `dplyr` but is kept as a direct dependency becau
 
 ---
 
-## 12. Testing Expectations
+## 13. Testing Expectations
 
 Every `compute_*()` function must have at least one `testthat` test in
 `tests/testthat/test-NN_module_subsection.R`.
@@ -554,8 +533,7 @@ demo_data <- sgpData_LONG |>
 
 **Important:** `sgpData_LONG` uses `YYYY_YYYY` year strings (e.g. `"2015_2016"`).
 `standardize_student_results()` converts these to the end year integer automatically.
-The DEMO spec's `tested_years` are `2013:2019`; the data contains grades 3–10 but the
-spec only defines grades 3–8.
+Always filter by year AFTER standardizing, not before.
 
 **Limitations of demo data:**
 - No `SCHOOL_ID` or `DISTRICT_ID` — Line 3 cannot be run
@@ -592,7 +570,7 @@ test_data <- do.call(rbind, lapply(c("ELA", "MATHEMATICS"), function(s) {
 
 ---
 
-## 13. Line 1: Porting Notes for Remaining Functions
+## 14. Line 1: Porting Notes for Remaining Functions
 
 `R/01_trend_overall.R` has `compute_score_summary()` and `mean_sd_table_wide()`.
 The following pre-package scripts still need porting:
@@ -614,15 +592,9 @@ The following pre-package scripts still need porting:
 | `summarize_enrollment.R` | `R/01_trend_enrollment.R` | `compute_enrollment_summary()` |
 | `summarize_enrollment_change.R` | `R/01_trend_enrollment.R` | `compute_enrollment_change()` |
 
-`make_proficiency.R` currently takes `n_proficiencies` and infers level order from label
-strings — replace with `cuts` and `labels` from `assessment_spec`.
-
-`summarize_enrollment.R` and `summarize_enrollment_change.R` use `stats::aggregate()`,
-`merge()`, and `for` loops — rewrite entirely in dplyr.
-
 ---
 
-## 14. Getting Started (for Claude Code in a new session)
+## 15. Getting Started (for Claude Code in a new session)
 
 1. Read this file completely before touching any code.
 2. Run `devtools::check()` first to confirm the baseline is clean (0 errors, 0 warnings).
@@ -630,10 +602,11 @@ strings — replace with `cuts` and `labels` from `assessment_spec`.
 3. Line 4 (Score Quality Analysis) is the canonical template — match its patterns exactly
    when building other modules.
 4. Before adding any new NSE variable to a function, add it to `R/globals.R`.
-5. Use `dev/test_*.R` scripts for rapid manual testing; use `testthat` for automated tests.
-   Do **not** edit files in `dev/` unless explicitly asked.
-6. The DEMO spec + `sgpData_LONG` is the primary runnable example. The MS spec is the
+5. The DEMO spec + `sgpData_LONG` is the primary runnable example. The MS spec is the
    reference for real-data structure. Always test new functions against both.
-7. Do not use `isTRUE()` on a vector — use `!is.na(x) & x` for logical column filtering.
-8. Do not use `dplyr::if_else()` for scalar conditions (e.g., inside a loop or `if/else`
-   branch on a single value) — use base R `if/else` instead.
+6. Do not use `isTRUE()` on a vector — use `!is.na(x) & x` for logical column filtering.
+7. Do not use `dplyr::if_else()` for scalar conditions — use base R `if/else`.
+8. Do not use `dplyr::recode(!!!list)` — use `left_join()` against a lookup data frame.
+9. Do not edit files in `dev/` or `MS/` unless explicitly asked — both are excluded from
+   git and the package build.
+10. The tempdir render pattern is required for all driver scripts due to Dropbox file locking.
