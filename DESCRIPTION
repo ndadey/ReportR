@@ -21,4 +21,5 @@ Suggests:
     devtools,
     here,
     flextable,
+    openxlsx,
     SGPdata

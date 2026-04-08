@@ -87,8 +87,8 @@ saveRDS(anomaly_results, "output/anomaly_results.rds")
 # =============================================================================
 
 # Copy the report template to your working directory so you can edit it.
-# Alternatively, you could run directly from the ist/templates within the
-# package directory (which can be found in 
+# Alternatively, you could render directly from the inst/templates path inside
+# the package directory (found via system.file("templates", package = "ReportR")).
 file.copy(
   system.file("templates/04_Anomaly_Report.qmd", package = "ReportR"),
   "04_Anomaly_Report.qmd",
@@ -116,4 +116,4 @@ quarto::quarto_render(
 
 # The report will be saved as 04_Anomaly_Report.html or 04_Anomaly_Report.docx 
 #in your working directory.
-message("Done! Open 04_Anomaly_Report.docx to view the report.")
+message("Done! Open 04_Anomaly_Report.html or docx to view the report.")
