@@ -81,6 +81,10 @@ anomaly_results$correlations$plot$line
 dir.create("output", showWarnings = FALSE)
 saveRDS(anomaly_results, "output/anomaly_results.rds")
 
+# Optionally export all summary tables to Excel (one tab per table).
+# Requires: install.packages("openxlsx")
+export_tables_to_excel(anomaly_results, "output/anomaly_tables.xlsx")
+
 
 # =============================================================================
 # STEP 3: Output via the Quarto Anomaly Analysis Report

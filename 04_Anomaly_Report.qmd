@@ -1,0 +1,437 @@
+---
+title: "Section 4. Score Quality Analysis"
+format:
+  docx:
+    toc: true
+    number-sections: true
+    fig-dpi: 300
+  html:
+    toc: true
+    toc-float: true
+    code-fold: true
+editor: visual
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  pkg_path:     null
+  spec_file:    null
+  results_file: null
+  min_n:        10
+---
+
+```{r setup}
+# pkg_path is the absolute path to the package root, passed by the driver
+# script. This is required because the QMD may render in a temp directory
+# where here::here() cannot locate the DESCRIPTION file.
+pkg_root <- params$pkg_path
+
+# Load package functions.
+# If pkg_root contains a source-level DESCRIPTION + R/ directory (dev mode),
+# use devtools::load_all(). Otherwise the package is installed — use library().
+if (!is.null(pkg_root) &&
+    file.exists(file.path(pkg_root, "DESCRIPTION")) &&
+    file.exists(file.path(pkg_root, "R"))) {
+  devtools::load_all(pkg_root)
+} else {
+  library(ReportR)
+}
+
+# Source the assessment spec — puts assessment_spec in scope.
+# assessment_spec is used directly throughout the report body.
+# spec_file may be a full absolute path (e.g. from system.file()) or a path
+# relative to pkg_root — handle both.
+spec_path <- if (file.exists(params$spec_file)) {
+  params$spec_file
+} else {
+  file.path(pkg_root, params$spec_file)
+}
+source(spec_path)
+
+# Load pre-computed results from RDS.
+anomaly_results <- readRDS(params$results_file)
+```
+
+## Introduction
+
+```{r subtitle, results='asis'}
+cat("###", assessment_spec$program$name, "\n")
+```
+
+This section conducts a series of diagnostic checks to identify **potential score quality issues** in the `r assessment_spec$program$name` data that may warrant further investigation. These analyses are intended as *screening tools*, not as determinations of data quality issues. Observed patterns may reflect data issues, population shifts, changes in instruction, or genuine changes in student performance.
+
+## Score Distribution Patterns
+
+### Potential Ceiling and Floor Effects
+
+Students scoring at or very near the highest obtainable scale score (HOSS) or lowest obtainable scale score (LOSS) may warrant further investigation. This section reports the percentage of students scoring within `r anomaly_results$params$point_adjust` points of either boundary for each year–grade–subject combination.
+
+```{r loss-hoss-narrative, results='asis'}
+cat(anomaly_results$loss_hoss$text$narrative, sep = "\n\n")
+```
+
+#### Summary Table
+
+The table below reports the percentage of students scoring within the flagging threshold of the HOSS and LOSS boundaries for each year, subject, and grade combination. The **Δ HOSS** and **Δ LOSS** columns show the year-over-year change in those percentages. Values are shown in red when the percentage is growing and green when it is shrinking. A dash (—) indicates the first observed year for that subject and grade.
+
+```{r loss-hoss-table}
+tbl_display <- anomaly_results$loss_hoss$table |>
+  dplyr::select(
+    Year          = YEAR,
+    Subject       = SUBJECT,
+    Grade         = GRADE,
+    N             = n,
+    `% Near HOSS` = pct_near_hoss,
+    `D HOSS`      = pct_near_hoss_change,
+    `HOSS Flag`   = hoss_flag,
+    `% Near LOSS` = pct_near_loss,
+    `D LOSS`      = pct_near_loss_change,
+    `LOSS Flag`   = loss_flag
+  )
+
+flextable::flextable(tbl_display) |>
+  flextable::colformat_double(
+    j = c("% Near HOSS", "D HOSS", "% Near LOSS", "D LOSS"),
+    digits = 1, na_str = "-"
+  ) |>
+  flextable::set_header_labels(
+    `D HOSS` = "\u0394 HOSS",
+    `D LOSS` = "\u0394 LOSS"
+  ) |>
+  flextable::bold(part = "header") |>
+  flextable::fontsize(size = 9, part = "all") |>
+  flextable::color(j = "D HOSS", i = ~ `D HOSS` > 0, color = "#cc0000") |>
+  flextable::color(j = "D HOSS", i = ~ `D HOSS` < 0, color = "#2e7d32") |>
+  flextable::color(j = "D LOSS", i = ~ `D LOSS` > 0, color = "#cc0000") |>
+  flextable::color(j = "D LOSS", i = ~ `D LOSS` < 0, color = "#2e7d32") |>
+  flextable::bg(j = "HOSS Flag", i = ~ `HOSS Flag` == "Severe",   bg = "#f4cccc") |>
+  flextable::bg(j = "HOSS Flag", i = ~ `HOSS Flag` == "Moderate", bg = "#fce8b2") |>
+  flextable::bg(j = "LOSS Flag", i = ~ `LOSS Flag` == "Severe",   bg = "#f4cccc") |>
+  flextable::bg(j = "LOSS Flag", i = ~ `LOSS Flag` == "Moderate", bg = "#fce8b2") |>
+  flextable::set_caption(
+    "Percent of students near LOSS and HOSS by year, subject, and grade. Delta columns show change from prior year (red = growing, green = shrinking)."
+  ) |>
+  flextable::set_table_properties(layout = "autofit", width = 1)
+```
+
+#### Cleveland Plots
+
+```{r plot-hoss-cleveland, fig.width=7, fig.height=4}
+anomaly_results$loss_hoss$plot_hoss_cleveland
+```
+
+```{r plot-loss-cleveland, fig.width=7, fig.height=4}
+anomaly_results$loss_hoss$plot_loss_cleveland
+```
+
+### Score Distribution Shape
+
+This section screens each year × subject × grade combination for unusual score distributions using three statistical indicators: standard deviation relative to the score range (flatness), Sarle's bimodality coefficient, and skewness. These are screening tools; flagged cells should be examined in context before drawing conclusions.
+
+```{r distributions-narrative, results='asis'}
+#cat(anomaly_results$distributions$text$narrative, sep = "\n\n")
+```
+
+### Score Distribution Plots
+
+Each panel shows overlaid score density curves for all years within a subject–grade combination. The x-axis is bounded to the LOSS–HOSS range. The red dashed line marks the HOSS; the blue dashed line marks the LOSS. Grey vertical lines show achievement level cut scores. Each panel includes per-year statistics: percentage of students within `r anomaly_results$params$point_adjust` points of the HOSS (↑HOSS) and LOSS (↓LOSS), skewness, and Sarle's bimodality coefficient (BC).
+
+```{r dist-plots, fig.width=9, fig.height=5, results='asis'}
+dist_plots <- anomaly_results$loss_hoss$plot_distributions
+if (length(dist_plots) == 0) {
+  cat("*No distribution data available.*")
+} else {
+  for (nm in names(dist_plots)) {
+    cat("\n\n####", nm, "\n\n")
+    print(dist_plots[[nm]])
+  }
+}
+```
+
+## Score Integrity
+
+This section checks two data quality conditions against the assessment specification:
+
+-   **Outside of Range Scores** are scale scores that fall outside the valid LOSS–HOSS range for a student's subject and grade and likely indicate data processing errors.
+
+-   **Level Mismatch Scores** occur when a student's recorded achievement level does not match the corresponding level expected based on their scale score.
+
+```{r score-integrity-narrative, results='asis'}
+cat(anomaly_results$score_integrity$text$narrative, sep = "\n\n")
+```
+
+### Summary of Flagged Cells
+
+The table below shows each year × subject × grade combination where at least one issue was identified. **Outside of Range** counts scores falling below LOSS or above HOSS. **Level Mismatch** counts records where the recorded achievement level does not match the level expected from the cutpoints.
+
+```{r score-integrity-table}
+if (nrow(anomaly_results$score_integrity$text$table) > 0) {
+  anomaly_results$score_integrity$text$table |>
+    dplyr::select(
+      Year                  = YEAR,
+      Subject               = SUBJECT,
+      Grade                 = GRADE,
+      N                     = n_total,
+      `N Outside of Range`  = n_invalid,
+      `% Outside of Range`  = pct_invalid,
+      `N Level Mismatch`    = n_mismatch,
+      `% Level Mismatch`    = pct_mismatch
+    ) |>
+    flextable::flextable() |>
+    flextable::colformat_double(
+      j = c("% Outside of Range", "% Level Mismatch"),
+      digits = 1, na_str = "-"
+    ) |>
+    flextable::bold(part = "header") |>
+    flextable::fontsize(size = 9, part = "all") |>
+    flextable::bg(
+      j = "N Outside of Range",
+      i = ~ `N Outside of Range` > 0, bg = "#f4cccc"
+    ) |>
+    flextable::bg(
+      j = "N Level Mismatch",
+      i = ~ `N Level Mismatch` > 0, bg = "#fce8b2"
+    ) |>
+    flextable::set_caption(
+      "Year-subject-grade combinations with outside-of-range scores or level mismatches."
+    ) |>
+    flextable::set_table_properties(layout = "autofit", width = 1)
+} else {
+  cat("*No issues found. All scores are within range and all levels match the specification.*")
+}
+```
+
+## Year-to-Year Outliers
+
+This section identifies year–subject–grade combinations where the year-to-year change in mean scale score, percent proficient, or binary demographic composition falls outside the expected range. For each metric the expected range is defined as the mean change ± 2 standard deviations across all subject-grade combinations with a prior year of data. Cells exceeding ±2 SD are flagged as **Mild**; cells exceeding ±3 SD are flagged as **Severe**. When multiple metrics are flagged for the same cell, the metric with the largest standardised deviation is reported.
+
+```{r outliers-narrative, results='asis'}
+cat(anomaly_results$outliers$text$narrative, sep = "\n\n")
+```
+
+### Delta Summary Table
+
+The table below shows the year-to-year change in mean scale score (**Δ Score**) and percent proficient (**Δ Prof.**) for every subject × grade × year-pair combination. A dash indicates no prior year is available. Cells flagged as Mild are highlighted in yellow; Severe in red.
+
+```{r outliers-delta-table}
+delta_tbl <- anomaly_results$outliers$table |>
+  dplyr::filter(!is.na(.data[["delta_mean_score"]]) |
+                !is.na(.data[["delta_pct_proficient"]])) |>
+  dplyr::mutate(
+    year_pair  = paste0(.data[["YEAR"]] - 1L, "\u2013", .data[["YEAR"]]),
+    grade_lbl  = dplyr::if_else(
+      is.na(.data[["GRADE"]]), "EOC", paste0("Grade ", .data[["GRADE"]])
+    )
+  ) |>
+  dplyr::select(
+    Subject      = SUBJECT,
+    Grade        = grade_lbl,
+    `Year Pair`  = year_pair,
+    N            = n,
+    `D Score`    = delta_mean_score,
+    `D Prof.`    = delta_pct_proficient,
+    Flag         = outlier_flag
+  ) |>
+  dplyr::arrange(Subject, Grade, `Year Pair`)
+
+flextable::flextable(delta_tbl) |>
+  flextable::colformat_double(
+    j = c("D Score", "D Prof."), digits = 1, na_str = "-"
+  ) |>
+  flextable::set_header_labels(
+    `D Score`  = "\u0394 Mean Score",
+    `D Prof.`  = "\u0394 % Proficient"
+  ) |>
+  flextable::bold(part = "header") |>
+  flextable::fontsize(size = 9, part = "all") |>
+  flextable::color(
+    j = "D Score",
+    i = ~ `D Score` > 0, color = "#2e7d32"
+  ) |>
+  flextable::color(
+    j = "D Score",
+    i = ~ `D Score` < 0, color = "#cc0000"
+  ) |>
+  flextable::color(
+    j = "D Prof.",
+    i = ~ `D Prof.` > 0, color = "#2e7d32"
+  ) |>
+  flextable::color(
+    j = "D Prof.",
+    i = ~ `D Prof.` < 0, color = "#cc0000"
+  ) |>
+  flextable::bg(
+    i = ~ Flag == "Severe", bg = "#f4cccc"
+  ) |>
+  flextable::bg(
+    i = ~ Flag == "Mild", bg = "#fce8b2"
+  ) |>
+  flextable::merge_v(j = c("Subject", "Grade")) |>
+  flextable::valign(j = c("Subject", "Grade"), valign = "top") |>
+  flextable::set_caption(
+    "Year-to-year changes in mean scale score and percent proficient by subject, grade, and year pair. Positive values in green, negative in red. Mild (yellow) = \u00b12 SD; Severe (red) = \u00b13 SD."
+  ) |>
+  flextable::set_table_properties(layout = "autofit", width = 1)
+```
+
+### Flagged Cells
+
+```{r outliers-table}
+flagged_tbl <- anomaly_results$outliers$table |>
+  dplyr::filter(.data[["outlier_flag"]] != "None") |>
+  dplyr::mutate(
+    year_pair = paste0(.data[["YEAR"]] - 1L, "\u2013", .data[["YEAR"]])
+  ) |>
+  dplyr::select(
+    `Year Pair`       = year_pair,
+    Subject           = SUBJECT,
+    Grade             = GRADE,
+    N                 = n,
+    `D Mean Score`    = delta_mean_score,
+    `D % Proficient`  = delta_pct_proficient,
+    Flag              = outlier_flag,
+    `Flagged Metric`  = outlier_metric,
+    Direction         = outlier_direction
+  )
+
+if (nrow(flagged_tbl) == 0) {
+  cat("*No outlier cells detected. All year-to-year changes were within",
+      "the expected range.*")
+} else {
+  flextable::flextable(flagged_tbl) |>
+    flextable::colformat_double(
+      j      = c("D Mean Score", "D % Proficient"),
+      digits = 1, na_str = "-"
+    ) |>
+    flextable::set_header_labels(
+      `D Mean Score`   = "\u0394 Mean Score",
+      `D % Proficient` = "\u0394 % Proficient"
+    ) |>
+    flextable::bold(part = "header") |>
+    flextable::fontsize(size = 9, part = "all") |>
+    flextable::bg(
+      i = ~ Flag == "Severe", bg = "#f4cccc"
+    ) |>
+    flextable::bg(
+      i = ~ Flag == "Mild", bg = "#fce8b2"
+    ) |>
+    flextable::set_caption(
+      "Year-subject-grade combinations flagged as outliers. Severe (red) exceeds 3 SD; Mild (yellow) exceeds 2 SD from the mean change."
+    ) |>
+    flextable::set_table_properties(layout = "autofit", width = 1)
+}
+```
+
+### Changes in Mean Scale Score
+
+```{r outliers-plot-score, fig.width=8, fig.height=6}
+anomaly_results$outliers$plot$score
+```
+
+### Changes in Percent Proficient
+
+```{r outliers-plot-proficiency, fig.width=8, fig.height=6}
+anomaly_results$outliers$plot$proficiency
+```
+
+## Year-to-Year Correlations
+
+Year-to-year Spearman correlations of student scale scores within each grade and subject measure the stability of relative student performance across administrations. Unusually low correlations (below 0.50) or large drops from one year to the next may indicate measurement issues, significant population shifts, or data anomalies that warrant further investigation.
+
+### Narrative
+
+```{r correlations-narrative, results='asis'}
+cat(anomaly_results$correlations$text$narrative, sep = "\n\n")
+```
+
+### Correlation Summary Table
+
+The table below shows cohort Spearman correlations and matched-pair counts for every subject, grade transition, and year-pair.
+
+```{r correlations-wide-table}
+wide_tbl <- anomaly_results$correlations$text$wide_table
+
+if (is.null(wide_tbl) || nrow(wide_tbl) == 0) {
+  cat("*No correlation data available.*")
+} else {
+  yp_levels <- attr(wide_tbl, "year_pair_levels")
+  if (is.null(yp_levels)) {
+    yp_levels <- sub("^correlation__", "",
+                     grep("^correlation__", names(wide_tbl), value = TRUE))
+  }
+
+  display_tbl <- wide_tbl
+  display_tbl[["grade_pair"]] <- as.character(display_tbl[["grade_pair"]])
+  names(display_tbl)[names(display_tbl) == "SUBJECT"]    <- "Subject"
+  names(display_tbl)[names(display_tbl) == "grade_pair"] <- "Grade Pair"
+  for (yp in yp_levels) {
+    old_c <- paste0("correlation__", yp)
+    old_n <- paste0("n__", yp)
+    if (old_c %in% names(display_tbl))
+      names(display_tbl)[names(display_tbl) == old_c] <- paste0(yp, " Corr.")
+    if (old_n %in% names(display_tbl))
+      names(display_tbl)[names(display_tbl) == old_n] <- paste0(yp, " N")
+  }
+
+  corr_cols <- grep(" Corr\\.$", names(display_tbl), value = TRUE)
+
+  ft <- flextable::flextable(display_tbl)
+  for (col in corr_cols) {
+    ft <- flextable::colformat_double(ft, j = col, digits = 3, na_str = "-")
+  }
+
+  ft |>
+    flextable::bold(part = "header") |>
+    flextable::fontsize(size = 9, part = "all") |>
+    flextable::merge_v(j = "Subject") |>
+    flextable::valign(j = "Subject", valign = "top") |>
+    flextable::set_caption(
+      "Cohort Spearman correlations and matched-pair counts (N) by subject, grade transition, and year pair."
+    ) |>
+    flextable::set_table_properties(layout = "autofit", width = 1)
+}
+```
+
+### Flagged Grade Pairs
+
+```{r correlations-flagged-table}
+cor_tbl <- anomaly_results$correlations$table
+
+flagged_cor <- cor_tbl |>
+  dplyr::filter((!is.na(.data[["low_flag"]])  & .data[["low_flag"]]) |
+                (!is.na(.data[["drop_flag"]]) & .data[["drop_flag"]]))
+
+if (nrow(flagged_cor) == 0) {
+  cat("*No flagged grade-pair combinations. All correlations were at or above 0.50 and no grade-pair showed a drop greater than 0.15.*")
+} else {
+  flagged_cor |>
+    dplyr::mutate(
+      year_pair  = paste0(.data[["YEAR_1"]], "\u2013", .data[["YEAR_2"]]),
+      grade_pair = paste0("Grades ", .data[["GRADE_1"]], "\u2192", .data[["GRADE_2"]])
+    ) |>
+    dplyr::select(
+      `Year Pair`  = year_pair,
+      Subject      = SUBJECT,
+      `Grade Pair` = grade_pair,
+      N            = n,
+      Correlation  = correlation,
+      `Low Flag`   = low_flag,
+      `Drop Flag`  = drop_flag
+    ) |>
+    flextable::flextable() |>
+    flextable::colformat_double(j = "Correlation", digits = 3, na_str = "-") |>
+    flextable::bold(part = "header") |>
+    flextable::fontsize(size = 9, part = "all") |>
+    flextable::bg(
+      i = ~ !is.na(`Low Flag`)  & `Low Flag`,  bg = "#fce8b2"
+    ) |>
+    flextable::bg(
+      i = ~ !is.na(`Drop Flag`) & `Drop Flag`, bg = "#f6b26b"
+    ) |>
+    flextable::set_caption(
+      "Flagged grade-pair combinations. Low correlation (< 0.50) highlighted in yellow; drop > 0.15 from prior year highlighted in orange."
+    ) |>
+    flextable::set_table_properties(layout = "autofit", width = 1)
+}
+```
