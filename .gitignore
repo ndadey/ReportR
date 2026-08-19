@@ -17,6 +17,12 @@ MS/
 dev/
 R/05_TCC_check.R
 
+# State setup scripts (reference machine-local data paths — create locally from template)
+states/*
+!states/DEMO/
+!states/DEMO/**
+!states/_config_template.R
+
 # Output files
 *.docx
 *.xlsx
