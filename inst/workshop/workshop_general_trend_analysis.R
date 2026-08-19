@@ -19,7 +19,7 @@
 # =============================================================================
 # STEP 1: Setup — Long Format Data & Assessment Spec
 # =============================================================================
-
+#devtools::install_github("ndadey/ReportR")
 library(ReportR)
 library(SGPdata)
 library(dplyr)
@@ -70,6 +70,9 @@ assessment_spec$achievement_levels$policy_benchmark
 #
 # report_years filters to a subset of years (NULL = use all years in the data)
 
+devtools::load_all("C:/Users/NathanDadey/CenterforAssessment Dropbox/Nathan Dadey/Git/ReportR")
+#system.file("specs/00_DEMO_Assessment_Spec.R", package = "ReportR"))
+#source("run_general_trend_analysis.R")
 general_trend_results <- run_general_trend_analysis(
   student_results_long = student_results_long,
   assessment_spec      = assessment_spec,
@@ -85,7 +88,7 @@ general_trend_results$score_trends$table
 # Score trend plots
 general_trend_results$score_trends$plot$mean_trend      # mean over time by grade
 general_trend_results$score_trends$plot$mean_sd         # mean ± 1 SD bands
-general_trend_results$score_trends$plot$grade_profile   # grade on x, year as colour
+general_trend_results$score_trends$plot$grade_profile   # grade on x, year as color
 general_trend_results$score_trends$plot$median_iqr      # median with IQR bands
 
 # Score trend narrative (plain-language summary of first-to-last year changes)

@@ -46,7 +46,7 @@ compute_proficiency <- function(student_results_long,
   out <- student_results_long |>
     dplyr::filter(!is.na(.data[["ACHIEVEMENT_LEVEL"]])) |>
     dplyr::group_by(.data[["YEAR"]], .data[["SUBJECT"]], .data[["GRADE"]]) |>
-    dplyr::summarise(
+    dplyr::summarize(
       n           = dplyr::n(),
       n_proficient = sum(.data[["ACHIEVEMENT_LEVEL"]] %in% prof_labels, na.rm = TRUE),
       .groups     = "drop"
@@ -72,7 +72,7 @@ compute_proficiency <- function(student_results_long,
 #' @param assessment_spec Named list describing the assessment program.
 #'
 #' @return A named list:
-#'   * `$trend` — line plot: YEAR on x, pct_proficient on y, grade as colour,
+#'   * `$trend` — line plot: YEAR on x, pct_proficient on y, grade as color,
 #'     faceted by subject
 #'   * `$heatmap` — heatmap: YEAR on x, grade on y, fill = pct_proficient,
 #'     faceted by subject
@@ -170,7 +170,8 @@ plot_proficiency <- function(proficiency_table, assessment_spec) {
 #' prof <- compute_proficiency(demo_data, assessment_spec)
 #' summarize_proficiency_findings(prof, assessment_spec)$narrative
 #' }
-summarize_proficiency_findings <- function(proficiency_table, assessment_spec) {
+summarize_proficiency_findings <- function(proficiency_table, assessment_spec,
+                                           flat_threshold = 1.0) {
   stopifnot(
     is.data.frame(proficiency_table),
     is.list(assessment_spec)
@@ -186,62 +187,84 @@ summarize_proficiency_findings <- function(proficiency_table, assessment_spec) {
 
   bench_label <- assessment_spec$achievement_levels$policy_benchmark
 
+  trend_arrow <- function(delta) {
+    if (abs(delta) < flat_threshold) "→" else if (delta > 0) "↑" else "↓"
+  }
+  trend_desc <- function(delta) {
+    pts <- paste0(round(abs(delta), 1), " pp")
+    if (abs(delta) < flat_threshold) paste0(pts, " (relatively flat)") else pts
+  }
+
   dat <- proficiency_table |>
     dplyr::left_join(subj_lookup, by = "SUBJECT") |>
     dplyr::mutate(
       subj_label = dplyr::coalesce(.data[["subj_label"]], .data[["SUBJECT"]])
     )
 
-  subjects    <- unique(dat[["SUBJECT"]])
-  by_subject  <- vector("list", length(subjects))
+  all_yrs  <- sort(unique(dat[["YEAR"]]))
+  first_yr <- all_yrs[1]
+  last_yr  <- all_yrs[length(all_yrs)]
+
+  subjects   <- unique(dat[["SUBJECT"]])
+  by_subject <- vector("list", length(subjects))
   names(by_subject) <- subjects
 
   for (s in subjects) {
-    d_s  <- dat |>
+    d_s <- dat |>
       dplyr::filter(.data[["SUBJECT"]] == s) |>
       dplyr::arrange(.data[["YEAR"]])
 
-    lbl  <- unique(d_s[["subj_label"]])[1]
-    yrs  <- sort(unique(d_s[["YEAR"]]))
+    lbl <- unique(d_s[["subj_label"]])[1]
+    yrs <- sort(unique(d_s[["YEAR"]]))
 
     if (length(yrs) < 2) {
-      by_subject[[s]] <- paste0("Only one year of data available for ", lbl, ".")
+      by_subject[[s]] <- paste0("**", lbl, ":** Only one year of data available.")
       next
     }
 
-    first_yr <- yrs[1]
-    last_yr  <- yrs[length(yrs)]
-
-    d_first <- d_s |> dplyr::filter(.data[["YEAR"]] == first_yr)
-    d_last  <- d_s |> dplyr::filter(.data[["YEAR"]] == last_yr)
-
     changes <- dplyr::inner_join(
-      d_first |> dplyr::select("GRADE", pct_first = "pct_proficient"),
-      d_last  |> dplyr::select("GRADE", pct_last  = "pct_proficient"),
+      d_s |> dplyr::filter(.data[["YEAR"]] == first_yr) |>
+        dplyr::select("GRADE", pct_first = "pct_proficient"),
+      d_s |> dplyr::filter(.data[["YEAR"]] == last_yr) |>
+        dplyr::select("GRADE", pct_last = "pct_proficient"),
       by = "GRADE"
     ) |>
       dplyr::mutate(delta = .data[["pct_last"]] - .data[["pct_first"]]) |>
-      dplyr::filter(!is.na(.data[["delta"]]))
+      dplyr::filter(!is.na(.data[["delta"]])) |>
+      dplyr::arrange(grade_key(.data[["GRADE"]]))
 
     if (nrow(changes) == 0) {
-      by_subject[[s]] <- paste0("Insufficient data to compute changes for ", lbl, ".")
+      by_subject[[s]] <- paste0("**", lbl, ":** Insufficient data to compute changes.")
       next
     }
 
-    overall_delta <- mean(changes[["delta"]], na.rm = TRUE)
-    direction     <- if (overall_delta > 0) "increased" else "decreased"
-    by_subject[[s]] <- paste0(
-      lbl, ": percent ", bench_label, " or above ", direction,
-      " by an average of ", round(abs(overall_delta), 1),
-      " percentage points from ", first_yr, " to ", last_yr,
-      " across ", nrow(changes), " grade(s)."
-    )
+    eoc <- all(is.na(changes[["GRADE"]]))
+
+    if (eoc) {
+      delta <- changes[["delta"]][1]
+      by_subject[[s]] <- paste0(
+        "**", lbl, ":** ", trend_arrow(delta), " ", trend_desc(delta),
+        " (", first_yr, " → ", last_yr, ")"
+      )
+    } else {
+      grade_bullets <- vapply(seq_len(nrow(changes)), function(i) {
+        g     <- changes[["GRADE"]][i]
+        delta <- changes[["delta"]][i]
+        g_lbl <- if (is.na(g)) "" else paste0("Grade ", g)
+        paste0("* ", g_lbl, ": ", trend_arrow(delta), " ", trend_desc(delta),
+               " (", first_yr, " → ", last_yr, ")")
+      }, character(1))
+      by_subject[[s]] <- paste0(
+        "**", lbl, "**\n\n",
+        paste(grade_bullets, collapse = "\n")
+      )
+    }
   }
 
-  bullets   <- paste0("- ", unlist(by_subject), collapse = "\n")
   narrative <- paste0(
-    "The following summarizes changes in percent ", bench_label,
-    " or above from the first to the last reported year:\n\n", bullets
+    "Changes in percent ", bench_label, " or above from ",
+    first_yr, " to ", last_yr, ":\n\n",
+    paste(unlist(by_subject), collapse = "\n\n")
   )
 
   list(
@@ -276,7 +299,8 @@ summarize_proficiency_findings <- function(proficiency_table, assessment_spec) {
 #' }
 run_proficiency <- function(student_results_long,
                             assessment_spec,
-                            min_n = 10) {
+                            min_n          = 10,
+                            flat_threshold = 1.0) {
   stopifnot(
     is.data.frame(student_results_long),
     is.list(assessment_spec)
@@ -284,7 +308,8 @@ run_proficiency <- function(student_results_long,
 
   tbl  <- compute_proficiency(student_results_long, assessment_spec, min_n = min_n)
   plt  <- plot_proficiency(tbl, assessment_spec)
-  txt  <- summarize_proficiency_findings(tbl, assessment_spec)
+  txt  <- summarize_proficiency_findings(tbl, assessment_spec,
+                                         flat_threshold = flat_threshold)
 
   list(
     table = tbl,

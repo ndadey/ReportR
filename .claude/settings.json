@@ -13,7 +13,19 @@
       "Bash(powershell -Command \"Remove-Item 'c:\\\\Users\\\\NathanDadey\\\\CenterforAssessment Dropbox\\\\Nathan Dadey\\\\Git\\\\ReportR\\\\R\\\\05_TCC_check.R' -Force\")",
       "Bash(\"C:/Program Files/R/R-4.4.2/bin/Rscript.exe\" dev/test_correlations2.R)",
       "Bash(gh auth:*)",
-      "Bash(Rscript -e ':*)"
+      "Bash(Rscript -e ':*)",
+      "Bash(grep -n \"u2014\\\\|\\\\\\\\\\\\\\\\u2014\\\\|\\\\xe2\\\\x80\\\\x94\" \"c:/Users/NathanDadey/CenterforAssessment Dropbox/Nathan Dadey/Git/ReportR/R/01_trend_enrollment.R\")",
+      "Bash('/c/Program Files/R/R-4.5.3/bin/Rscript.exe' -e ' *)",
+      "Bash(\"/c/Program Files/R/R-4.5.3/bin/Rscript.exe\" --no-save -e \"devtools::load_all\\(quiet=TRUE\\); testthat::test_file\\('tests/testthat/test-01_trend_enrollment.R'\\)\")",
+      "Bash(\"/c/Program Files/R/R-4.5.3/bin/Rscript.exe\" -e \"devtools::document\\(quiet = TRUE\\)\")",
+      "Bash(\"/c/Program Files/R/R-4.5.3/bin/Rscript.exe\" --no-save -e \"devtools::load_all\\(quiet=TRUE\\); testthat::test_local\\(\\)\")",
+      "Bash(\"/c/Program Files/R/R-4.5.3/bin/Rscript.exe\" -e \"devtools::document\\(quiet=TRUE\\)\")",
+      "Bash(sed -i 's/The table below summarises/The table below summarizes/' inst/templates/01_Enrollment_Trends_Report.qmd 01_Enrollment_Trends_Report.qmd)",
+      "Bash(sed -i 's/summarise left_join/summarize left_join/' R/01_general_cohort.R)",
+      "Bash(sed -i -e 's/we set it explicitly after summarise/we set it explicitly after summarize/' -e 's/Visualises how/Visualizes how/' R/01_trend_enrollment.R)",
+      "Bash(sed -i 's/after a separate summarise step/after a separate summarize step/' R/utils_enrollment.R)",
+      "Bash('/c/Program Files/R/R-4.5.3/bin/Rscript.exe' --no-save -e 'devtools::load_all\\(quiet=TRUE\\); testthat::test_file\\('\\\\''tests/testthat/test-01_trend_enrollment.R'\\\\''\\)')",
+      "Bash(\"/c/Program Files/R/R-4.5.3/bin/Rscript.exe\" --no-save -e \"devtools::load_all\\(quiet=TRUE\\); cat\\('Load successful\\\\n'\\)\")"
     ]
   }
 }

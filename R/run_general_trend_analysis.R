@@ -14,12 +14,22 @@
 #'   all years present in the data are used.
 #' @param min_n Integer. Minimum group size for small-n suppression. Default
 #'   `10`.
+#' @param score_flat_threshold Numeric. Scale score point changes smaller than
+#'   this are labelled "relatively flat" in the score trends narrative. Default
+#'   `1.0`.
+#' @param prof_flat_threshold Numeric. Percentage point changes smaller than
+#'   this are labelled "relatively flat" in the proficiency narrative. Default
+#'   `1.0`.
+#'
+#' @param flag_sd Numeric. SD threshold for normative transition flagging.
+#'   Default `1.5`.
 #'
 #' @return A named list `general_trend_results` with sub-lists:
-#'   * `$score_trends` — output of [run_score_trends()]
-#'   * `$proficiency` — output of [run_proficiency()]
-#'   * `$distributions` — output of [run_score_density()]
-#'   * `$params` — list of run parameters
+#'   * `$score_trends`            — output of [run_score_trends()]
+#'   * `$proficiency`             — output of [run_proficiency()]
+#'   * `$distributions`           — output of [run_score_density()]
+#'   * `$achievement_transitions` — output of [run_achievement_transitions()]
+#'   * `$params`                  — list of run parameters
 #' @export
 #' @examples
 #' \dontrun{
@@ -34,8 +44,11 @@
 #' }
 run_general_trend_analysis <- function(student_results_long,
                                        assessment_spec,
-                                       report_years = NULL,
-                                       min_n        = 10) {
+                                       report_years         = NULL,
+                                       min_n                = 10,
+                                       score_flat_threshold = 1.0,
+                                       prof_flat_threshold  = 1.0,
+                                       flag_sd              = 1.5) {
   stopifnot(
     is.data.frame(student_results_long),
     is.list(assessment_spec)
@@ -53,14 +66,16 @@ run_general_trend_analysis <- function(student_results_long,
   general_trend_results$score_trends <- run_score_trends(
     student_results_long = student_results_long,
     assessment_spec      = assessment_spec,
-    min_n                = min_n
+    min_n                = min_n,
+    flat_threshold       = score_flat_threshold
   )
 
   message("Running proficiency trends...")
   general_trend_results$proficiency <- run_proficiency(
     student_results_long = student_results_long,
     assessment_spec      = assessment_spec,
-    min_n                = min_n
+    min_n                = min_n,
+    flat_threshold       = prof_flat_threshold
   )
 
   message("Running score distributions...")
@@ -70,8 +85,16 @@ run_general_trend_analysis <- function(student_results_long,
     min_n                = min_n
   )
 
-  # Store run parameters so the report can reference them without calling
-  # formals() on the function (which fails when the package is installed).
+  message("Running achievement transitions...")
+  general_trend_results$achievement_transitions <- run_achievement_transitions(
+    student_results_long = student_results_long,
+    assessment_spec      = assessment_spec,
+    score_trends         = general_trend_results$score_trends,
+    proficiency          = general_trend_results$proficiency,
+    min_n                = min_n,
+    flag_sd              = flag_sd
+  )
+
   general_trend_results$params <- list(min_n = min_n)
 
   general_trend_results

@@ -12,7 +12,7 @@
 # Functions:
 #   compute_correlations()   — cohort-style score correlations
 #   .make_corr_wide()        — internal helper: pivot to wide display table
-#   plot_correlations()      — visualise correlation trends
+#   plot_correlations()      — visualize correlation trends
 #   summarize_correlations() — narrative summary + wide table
 #   run_correlations()       — entry point; returns the sub-list
 # ==============================================================================
@@ -108,7 +108,7 @@ compute_correlations <- function(student_results_long,
       .data[["SUBJECT"]],
       .data[["GRADE_1"]], .data[["GRADE_2"]]
     ) |>
-    dplyr::summarise(
+    dplyr::summarize(
       n = dplyr::n(),
       correlation = dplyr::if_else(
         dplyr::n() >= min_n,
@@ -431,7 +431,7 @@ summarize_correlations <- function(correlation_table) {
 
   by_subject <- has_corr |>
     dplyr::group_by(.data[["SUBJECT"]]) |>
-    dplyr::summarise(
+    dplyr::summarize(
       median_corr = stats::median(.data[["correlation"]], na.rm = TRUE),
       n_low_flag  = sum(.data[["low_flag"]],  na.rm = TRUE),
       n_drop_flag = sum(.data[["drop_flag"]], na.rm = TRUE),

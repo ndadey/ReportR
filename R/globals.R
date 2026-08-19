@@ -62,5 +62,45 @@ utils::globalVariables(c(
   "p25_val", "p50_val", "p75_val",
 
   # --- trend: proficiency ---
-  "PROFICIENT", "pct_proficient", "n_proficient"
+  "PROFICIENT", "pct_proficient", "n_proficient",
+
+  # --- trend: achievement transitions ---
+  "from_level", "to_level", "prop", "avg_prop", "avg_n",
+  "move_dir", "pct", "stable", "up", "down",
+  "total_transition_rate", "net_upward_rate",
+  "z_total", "z_net", "flag_type", "annotation",
+  "divergence_flag", "dir_net", "dir_mean", "dir_prof",
+  "delta_mean", "delta_pct_prof", "corr_mean", "corr_prof",
+  "year_pair", "cell_id", "pt_label", "diverged", "flagged",
+  "GRADE_1", "GRADE_2", "mean_y1", "mean_y2",
+
+  # --- cohort analysis (1.3) ---
+  "COHORT_YEAR", "COHORT_YR_CHR",
+  "FROM_GRADE", "TO_GRADE", "GRADE_CHR",
+  "FROM_LEVEL", "TO_LEVEL", "PCT_OF_FROM",
+  "TRAJECTORY",
+  "N_ORIGINAL", "N_ENTERING", "N_TOTAL", "PCT_RETAINED",
+  "MOBILITY_STATUS",
+  "DEMOGRAPHIC", "GROUP", "PCT_WITHIN_MOBILITY",
+  "GRADE_X", "GRADE_Y", "YEAR_X", "YEAR_Y",
+  "R", "P_VALUE",
+  "Z_SCORE", "FLAGGED",
+  "MEAN_SCORE", "SD_SCORE", "PCT_PROFICIENT",
+  "MEDIAN_SCORE", "Q1_SCORE", "Q3_SCORE",
+  "IQR_LO", "IQR_HI",
+  "n_level", "n_mob", "n_total", "n_from",
+  "lvl_from", "lvl_to",
+  "mean_n", "sd_n",
+  "SCORE_X", "SCORE_Y",
+
+  # --- enrollment (1.2) ---
+  # N, alluvium_id, subgroup_val used as bare names in ggplot2::aes() inside
+  # plot_enrollment_sankey(); all other enrollment columns use .data[[]] pronoun
+  "N", "alluvium_id", "subgroup_val",
+  # Additional columns referenced in dplyr / ggplot expressions without pronoun
+  "subgroup_var", "total_N", "N_change", "N_pct_change",
+  "suppressed", "pct", "group", "N_sg", "pct_sg",
+  "pct_change", "prior_year",
+  # enrollment vs. score scatter plot
+  "delta_mean", "year_pair"
 ))

@@ -1,0 +1,138 @@
+---
+title: "Enrollment Trends — Program Brief"
+format:
+  docx:
+    toc: false
+    fig-dpi: 300
+  html:
+    toc: false
+    code-fold: true
+editor: visual
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  pkg_path:     null
+  spec_file:    null
+  results_file: null
+  min_n:        10
+---
+
+```{r setup}
+pkg_root <- params$pkg_path
+
+if (!is.null(pkg_root) &&
+    file.exists(file.path(pkg_root, "DESCRIPTION")) &&
+    file.exists(file.path(pkg_root, "R"))) {
+  devtools::load_all(pkg_root)
+} else {
+  library(ReportR)
+}
+
+spec_path <- if (!is.null(params$spec_file) && file.exists(params$spec_file)) {
+  params$spec_file
+} else if (!is.null(pkg_root) && !is.null(params$spec_file)) {
+  file.path(pkg_root, params$spec_file)
+} else {
+  NULL
+}
+if (!is.null(spec_path)) source(spec_path)
+
+enrollment_results <- readRDS(params$results_file)
+min_n              <- params$min_n
+```
+
+## `r assessment_spec$program$name` — Enrollment Brief
+
+```{r intro-narrative, results='asis'}
+cat(enrollment_results$text$narrative, "\n")
+```
+
+## Key Enrollment Figures
+
+```{r key-figures}
+if (!is.null(enrollment_results$counts$by_year) &&
+    nrow(enrollment_results$counts$by_year) > 0) {
+  plot_enrollment_table(
+    enrollment_results$counts$by_year,
+    type = "counts",
+    assessment_spec = assessment_spec
+  )
+} else {
+  cat("*Enrollment data not available.*\n")
+}
+```
+
+## Notable Year-Over-Year Shifts
+
+```{r notable-shifts, results='asis'}
+# Identify the subgroup with the largest absolute proportion shift
+transitions  <- enrollment_results$transitions
+notable_sg   <- NULL
+max_abs_chng <- 0
+
+for (sg in names(transitions)) {
+  smry <- transitions[[sg]]$summary
+  if (!is.null(smry) && nrow(smry) > 0 && "pct_change" %in% names(smry)) {
+    max_chng <- max(abs(smry[["pct_change"]]), na.rm = TRUE)
+    if (!is.na(max_chng) && max_chng > max_abs_chng) {
+      max_abs_chng <- max_chng
+      notable_sg   <- sg
+    }
+  }
+}
+
+if (!is.null(notable_sg)) {
+  smry <- transitions[[notable_sg]]$summary
+  # Show top 3 shifts by absolute magnitude
+  top3 <- smry[order(abs(smry[["pct_change"]]), decreasing = TRUE), ]
+  top3 <- top3[!is.na(top3[["pct_change"]]), ]
+  top3 <- head(top3, 3)
+
+  cat("The largest year-over-year shifts in subgroup composition occurred in",
+      paste0("**", notable_sg, "**"), "(top changes shown below).\n\n")
+
+  print(
+    plot_enrollment_table(top3, type = "proportions",
+                          assessment_spec = assessment_spec)
+  )
+} else {
+  cat("*No notable shifts detected across subgroup composition indicators.*\n")
+}
+```
+
+## Enrollment Composition
+
+```{r sankey-primary, fig.height=5, fig.width=8}
+# Display Sankey diagram for the most policy-relevant categorical subgroup.
+# Priority order: RACE_ETHNICITY, EL, FRL, IEP; fallback to first available.
+priority_order <- c("RACE_ETHNICITY", "EL", "FRL", "IEP")
+plot_sg <- NULL
+for (sg in priority_order) {
+  if (sg %in% names(enrollment_results$transitions)) {
+    tbl <- enrollment_results$transitions[[sg]]$table
+    if (!is.null(tbl) && nrow(tbl) > 0) {
+      plot_sg <- sg
+      break
+    }
+  }
+}
+if (is.null(plot_sg) && length(names(enrollment_results$transitions)) > 0) {
+  plot_sg <- names(enrollment_results$transitions)[1]
+}
+
+if (!is.null(plot_sg) && requireNamespace("ggalluvial", quietly = TRUE)) {
+  tbl <- enrollment_results$transitions[[plot_sg]]$table
+  if (!is.null(tbl) && nrow(tbl) > 0) {
+    plot_enrollment_sankey(
+      tbl, subgroup_var = plot_sg,
+      assessment_spec = assessment_spec
+    )
+  }
+} else if (!requireNamespace("ggalluvial", quietly = TRUE)) {
+  cat("*Install the `ggalluvial` package to render the composition diagram.*\n")
+} else {
+  cat("*No subgroup composition data available.*\n")
+}
+```

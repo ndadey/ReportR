@@ -1,0 +1,356 @@
+---
+title: "Section 1.3. Cohort Composition and Performance"
+date: today
+format:
+  html:
+    toc: true
+    toc-float: true
+    toc-depth: 3
+    code-fold: true
+    embed-resources: true
+  docx:
+    toc: true
+    toc-depth: 3
+    fig-dpi: 300
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  pkg_path:     null
+  spec_file:    null
+  results_file: null
+  min_n:        10
+---
+
+```{r setup}
+pkg_root <- params$pkg_path
+
+if (!is.null(pkg_root) &&
+    file.exists(file.path(pkg_root, "DESCRIPTION")) &&
+    file.exists(file.path(pkg_root, "R"))) {
+  devtools::load_all(pkg_root)
+} else {
+  library(ReportR)
+}
+
+spec_path <- if (!is.null(params$spec_file) && nzchar(params$spec_file) &&
+                 file.exists(params$spec_file)) {
+  params$spec_file
+} else if (!is.null(pkg_root)) {
+  file.path(pkg_root, params$spec_file)
+} else {
+  NULL
+}
+
+if (!is.null(spec_path) && file.exists(spec_path)) {
+  source(spec_path)
+} else {
+  stop("spec_file not found. Pass an absolute path via params$spec_file.")
+}
+
+cohort_results <- readRDS(params$results_file)
+min_n          <- params$min_n
+anchor_grade   <- assessment_spec$years$cohort_anchor_grade
+```
+
+## Introduction
+
+```{r subtitle, results='asis'}
+cat("###", assessment_spec$program$name, "\n")
+```
+
+This section presents cohort composition and performance findings for
+`r assessment_spec$program$name`. A **cohort** is defined as all students who
+entered the tested grade sequence at Grade `r anchor_grade` in a given year
+(`COHORT_YEAR`). The analyses follow each cohort across grades, tracking mean
+scores, proficiency rates, score distributions, achievement level transitions,
+and student mobility (entering, continuing, and exiting students).
+
+All analyses exclude cells with fewer than `r min_n` students.
+
+------------------------------------------------------------------------
+
+## 1. Sample Sizes and Cohort Coverage
+
+```{r cohort-narrative, results='asis'}
+cat(cohort_results$text$narrative)
+```
+
+```{r cohort-sample-table}
+tbl <- cohort_results$summary |>
+  dplyr::select(SUBJECT, COHORT_YEAR, GRADE, YEAR, N) |>
+  dplyr::arrange(SUBJECT, COHORT_YEAR, GRADE)
+
+flextable::flextable(tbl) |>
+  flextable::bold(part = "header") |>
+  flextable::fontsize(size = 9, part = "all") |>
+  flextable::merge_v(j = c("SUBJECT", "COHORT_YEAR")) |>
+  flextable::set_table_properties(layout = "autofit", width = 1)
+```
+
+### 1b. Enrollment Diagnostics
+
+```{r enroll-narrative, results='asis'}
+cat(cohort_results$enrollment_diag$narrative)
+```
+
+```{r enroll-table}
+enroll_tbl <- cohort_results$enrollment_diag$table
+
+ft <- flextable::flextable(enroll_tbl) |>
+  flextable::bold(part = "header") |>
+  flextable::fontsize(size = 9, part = "all") |>
+  flextable::merge_v(j = c("SUBJECT", "GRADE")) |>
+  flextable::set_table_properties(layout = "autofit", width = 1)
+
+# Color-code flagged rows
+flagged_rows <- which(!is.na(enroll_tbl$FLAGGED) & enroll_tbl$FLAGGED)
+if (length(flagged_rows) > 0) {
+  severe <- which(!is.na(enroll_tbl$Z_SCORE) &
+                  abs(enroll_tbl$Z_SCORE) > 3)
+  ft <- flextable::bg(ft, i = flagged_rows, bg = "#fce8b2", part = "body")
+  if (length(severe) > 0)
+    ft <- flextable::bg(ft, i = severe, bg = "#f4cccc", part = "body")
+}
+ft
+```
+
+### 1c. Cohort Persistence
+
+```{r persistence-section}
+if (!is.null(cohort_results$persistence) &&
+    nrow(cohort_results$persistence) > 0) {
+  flextable::flextable(cohort_results$persistence) |>
+    flextable::bold(part = "header") |>
+    flextable::fontsize(size = 9, part = "all") |>
+    flextable::merge_v(j = c("SUBJECT", "COHORT_YEAR")) |>
+    flextable::colformat_double(
+      j = "PCT_RETAINED",
+      digits = 1,
+      suffix = "%"
+    ) |>
+    flextable::set_table_properties(layout = "autofit", width = 1)
+} else {
+  cat("_Cohort persistence data are not available (persistent student IDs required)._\n")
+}
+```
+
+### 1d. Entering, Continuing, and Exiting Students
+
+Students who appear in a given year but not the prior year are classified as
+**Entering**; those present in both the prior and current year are
+**Continuing**; those in the prior year but absent in the current year are
+**Exiting**.
+
+*Note:* If Exiting students are disproportionately drawn from lower achievement
+levels, mean score trends for the population may be overstated — students most
+likely to score low may be exiting the cohort before subsequent grades are
+tested.
+
+```{r mobility-plots, fig.width=9, fig.height=5, results='asis'}
+if (!is.null(cohort_results$plot$mobility_distribution)) {
+  for (p in cohort_results$plot$mobility_distribution) {
+    print(p)
+    cat("\n\n")
+  }
+} else {
+  cat("_Mobility plots not available (persistent student IDs required)._\n")
+}
+```
+
+```{r mobility-achievement-plots, fig.width=9, fig.height=5, results='asis'}
+if (!is.null(cohort_results$plot$mobility_by_achievement)) {
+  for (p in cohort_results$plot$mobility_by_achievement) {
+    print(p)
+    cat("\n\n")
+  }
+}
+```
+
+------------------------------------------------------------------------
+
+## 2. Mean Scale Scores by Cohort
+
+```{r mean-score-plots, fig.width=9, fig.height=5, results='asis'}
+for (p in cohort_results$plot$mean_scores) {
+  print(p)
+  cat("\n\n")
+}
+```
+
+```{r mean-score-table}
+summary_tbl <- cohort_results$summary |>
+  dplyr::select(SUBJECT, COHORT_YEAR, GRADE, YEAR, N,
+                MEAN_SCORE, SD_SCORE, PCT_PROFICIENT) |>
+  dplyr::mutate(
+    MEAN_SCORE     = round(MEAN_SCORE, 2),
+    SD_SCORE       = round(SD_SCORE, 2),
+    PCT_PROFICIENT = round(PCT_PROFICIENT, 1)
+  )
+
+flextable::flextable(summary_tbl) |>
+  flextable::bold(part = "header") |>
+  flextable::fontsize(size = 9, part = "all") |>
+  flextable::merge_v(j = c("SUBJECT", "COHORT_YEAR")) |>
+  flextable::set_table_properties(layout = "autofit", width = 1)
+```
+
+------------------------------------------------------------------------
+
+## 3. Proficiency Rates by Cohort
+
+```{r prof-plots, fig.width=9, fig.height=5, results='asis'}
+for (p in cohort_results$plot$proficiency_rates) {
+  print(p)
+  cat("\n\n")
+}
+```
+
+------------------------------------------------------------------------
+
+## 4. Score Distributions by Cohort
+
+```{r dist-plots, fig.width=9, fig.height=6, results='asis'}
+for (p in cohort_results$plot$distributions) {
+  print(p)
+  cat("\n\n")
+}
+```
+
+------------------------------------------------------------------------
+
+## 5. Achievement Level Transitions
+
+```{r sankey-plots, fig.width=9, fig.height=5, results='asis'}
+if (!is.null(cohort_results$plot$sankey)) {
+  for (p in cohort_results$plot$sankey) {
+    print(p)
+    cat("\n\n")
+  }
+} else {
+  cat("_Transition diagrams not available (persistent student IDs required)._\n")
+}
+```
+
+```{r transition-table}
+if (nrow(cohort_results$transitions) > 0) {
+  disp_trans <- cohort_results$transitions |>
+    dplyr::mutate(PCT_OF_FROM = round(PCT_OF_FROM, 1)) |>
+    dplyr::filter(!is.na(PCT_OF_FROM))
+
+  flextable::flextable(disp_trans) |>
+    flextable::bold(part = "header") |>
+    flextable::fontsize(size = 9, part = "all") |>
+    flextable::merge_v(j = c("SUBJECT", "COHORT_YEAR", "FROM_GRADE")) |>
+    flextable::set_table_properties(layout = "autofit", width = 1)
+} else {
+  cat("_No transition data available._\n")
+}
+```
+
+------------------------------------------------------------------------
+
+## 6. Rates of Change Across Cohorts
+
+```{r roc-plots, fig.width=9, fig.height=5, results='asis'}
+if (!is.null(cohort_results$plot$rate_of_change)) {
+  for (p in cohort_results$plot$rate_of_change) {
+    print(p)
+    cat("\n\n")
+  }
+} else {
+  cat("_Rate-of-change plots not available (persistent student IDs required)._\n")
+}
+```
+
+```{r roc-table}
+if (nrow(cohort_results$rate_of_change) > 0) {
+  flextable::flextable(
+    cohort_results$rate_of_change |> dplyr::mutate(PCT = round(PCT, 1))
+  ) |>
+    flextable::bold(part = "header") |>
+    flextable::fontsize(size = 9, part = "all") |>
+    flextable::merge_v(j = c("SUBJECT", "COHORT_YEAR")) |>
+    flextable::set_table_properties(layout = "autofit", width = 1)
+}
+```
+
+------------------------------------------------------------------------
+
+## 7. Demographic Composition Across Cohorts
+
+```{r demo-plots, fig.width=9, fig.height=5, results='asis'}
+for (p in cohort_results$plot$demographics) {
+  print(p)
+  cat("\n\n")
+}
+```
+
+------------------------------------------------------------------------
+
+## 8. Cohort Trajectories vs. Cross-Sectional Trends
+
+The plots in Section 2 overlay both **cohort** (same students followed across
+grades) and **cross-sectional** (all students in a given grade and year)
+trajectories. When cohort and cross-sectional trends diverge, it can indicate
+that cohort composition is changing (e.g., higher-scoring students exiting in
+later grades) in ways that would bias cross-sectional comparisons.
+
+```{r cohort-vs-xs-table}
+xs <- cohort_results$crosssectional$crosssectional
+if (!is.null(xs) && nrow(xs) > 0) {
+  flextable::flextable(
+    xs |> dplyr::mutate(
+      MEAN_SCORE     = round(MEAN_SCORE, 2),
+      PCT_PROFICIENT = round(PCT_PROFICIENT, 1)
+    )
+  ) |>
+    flextable::bold(part = "header") |>
+    flextable::fontsize(size = 9, part = "all") |>
+    flextable::merge_v(j = c("SUBJECT", "GRADE")) |>
+    flextable::set_table_properties(layout = "autofit", width = 1)
+}
+```
+
+------------------------------------------------------------------------
+
+## 9. Score Correlations Across Adjacent Grades
+
+```{r corr-plots, fig.width=9, fig.height=5, results='asis'}
+if (!is.null(cohort_results$plot$correlations)) {
+  for (p in cohort_results$plot$correlations) {
+    print(p)
+    cat("\n\n")
+  }
+} else {
+  cat("_Correlation plots not available (persistent student IDs required)._\n")
+}
+```
+
+```{r corr-table}
+if (nrow(cohort_results$correlations) > 0) {
+  flextable::flextable(
+    cohort_results$correlations |>
+      dplyr::mutate(R = round(R, 3), P_VALUE = round(P_VALUE, 4))
+  ) |>
+    flextable::bold(part = "header") |>
+    flextable::fontsize(size = 9, part = "all") |>
+    flextable::merge_v(j = c("SUBJECT", "COHORT_YEAR")) |>
+    flextable::set_table_properties(layout = "autofit", width = 1)
+} else {
+  cat("_No correlation data available._\n")
+}
+```
+
+------------------------------------------------------------------------
+
+## Appendix: Full Summary Tables
+
+```{r appendix-summary}
+flextable::flextable(cohort_results$summary) |>
+  flextable::bold(part = "header") |>
+  flextable::fontsize(size = 8, part = "all") |>
+  flextable::merge_v(j = c("SUBJECT", "COHORT_YEAR")) |>
+  flextable::set_table_properties(layout = "autofit", width = 1)
+```

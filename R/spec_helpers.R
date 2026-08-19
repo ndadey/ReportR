@@ -26,8 +26,10 @@ get_score_spec <- function(assessment_spec, subject, grade = NULL) {
     is.character(subject),
     length(subject) == 1L
   )
-  key <- if (is.null(grade)) subject else paste(subject, grade, sep = "_")
-  assessment_spec$scale_scores[[key]]
+  ss <- assessment_spec$scale_scores[[subject]]
+  if (is.null(ss)) return(NULL)
+  if (is.null(grade)) return(ss)
+  ss[[as.character(grade)]]
 }
 
 
@@ -60,7 +62,7 @@ build_loss_hoss_lookup <- function(assessment_spec) {
     grades <- assessment_spec$subjects[[subj]]$grades
 
     if (is.null(grades)) {
-      # EOC subject — key is the subject name alone
+      # EOC subject — no grade nesting
       ss <- assessment_spec$scale_scores[[subj]]
       if (is.null(ss)) return(NULL)
       data.frame(
@@ -71,10 +73,9 @@ build_loss_hoss_lookup <- function(assessment_spec) {
         stringsAsFactors = FALSE
       )
     } else {
-      # Span-tested subject — one row per grade
+      # Span-tested subject — nested by grade character key
       grade_rows <- lapply(grades, function(g) {
-        key <- paste(subj, g, sep = "_")
-        ss  <- assessment_spec$scale_scores[[key]]
+        ss <- assessment_spec$scale_scores[[subj]][[as.character(g)]]
         if (is.null(ss)) return(NULL)
         data.frame(
           SUBJECT = subj,

@@ -133,6 +133,11 @@ compute_score_summary <- function(student_results_long,
       by = group_vars
     ) |>
     dplyr::rename(Mean = "mean", SD = "sd", N = "n_nonmissing") |>
+    dplyr::mutate(
+      Mean = round(.data[["Mean"]], 2),
+      SD   = round(.data[["SD"]],   2)
+    ) |>
+    dplyr::select(dplyr::all_of(c(group_vars, "Mean", "SD", "N"))) |>
     tidyr::pivot_longer(
       cols      = c("Mean", "SD", "N"),
       names_to  = "stat",
@@ -147,7 +152,7 @@ compute_score_summary <- function(student_results_long,
       values_from = "value"
     )
 
-  # Order columns: id columns, then year blocks sorted chronologically
+  # Order columns: id columns, then stat groups (all Mean years, all SD years, all N years)
   id_cols   <- if (by_grade) c("SUBJECT", "GRADE") else "SUBJECT"
   yr_order  <- sort(unique(student_results_long[["YEAR"]]))
   stat_cols <- as.vector(
@@ -241,7 +246,7 @@ mean_sd_table_wide <- function(student_results_long,
 #'   * `$mean_trend` — mean per grade over time, faceted by subject
 #'   * `$mean_sd` — mean ± 1 SD bands, faceted by subject
 #'   * `$median_iqr` — median with IQR bands, faceted by subject
-#'   * `$grade_profile` — grade on x-axis, year as colour, faceted by subject
+#'   * `$grade_profile` — grade on x-axis, year as color, faceted by subject
 #' @export
 #' @examples
 #' \dontrun{
@@ -293,21 +298,54 @@ plot_score_trends <- function(score_summary, assessment_spec) {
       YEAR_chr   = as.character(.data[["YEAR"]])
     )
 
-  # ---- 1. Mean trend ----
+  subjects <- names(assessment_spec$subjects)
+
+  # Per-grade LOSS/HOSS bounds — used to anchor each facet's y-axis
+  lh_lookup <- build_loss_hoss_lookup(assessment_spec)
+
+  # Build a geom_blank data frame for one subject so each grade facet is
+  # anchored to its own LOSS/HOSS range.
+  make_bounds_df <- function(subj, grade_lbl_levels, year_val) {
+    lh_s <- lh_lookup[lh_lookup[["SUBJECT"]] == subj, ]
+    if (nrow(lh_s) == 0) return(NULL)
+    rows <- lapply(seq_len(nrow(lh_s)), function(i) {
+      g    <- lh_s[["GRADE"]][i]
+      glbl <- if (is.na(g)) "Grade NA" else paste0("Grade ", g)
+      data.frame(
+        grade_lbl = factor(glbl, levels = grade_lbl_levels),
+        bound     = c(lh_s[["LOSS"]][i], lh_s[["HOSS"]][i]),
+        YEAR_chr  = year_val,
+        stringsAsFactors = FALSE
+      )
+    })
+    do.call(rbind, rows)
+  }
+
+  # ---- 1. Mean trend — one plot per subject, grades as facets ----
   d_mean <- long |> dplyr::filter(.data[["metric"]] == "mean")
 
-  p_mean <- ggplot2::ggplot(
-    d_mean,
-    ggplot2::aes(x = YEAR_chr, y = value, group = grade_lbl, color = grade_lbl)
-  ) +
-    ggplot2::geom_line() +
-    ggplot2::geom_point() +
-    ggplot2::facet_wrap(~ subj_label, nrow = 1) +
-    ggplot2::labs(x = NULL, y = "Mean Scale Score", color = "Grade") +
-    ggplot2::theme_bw() +
-    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+  mean_trend <- setNames(lapply(subjects, function(s) {
+    d <- d_mean |> dplyr::filter(.data[["SUBJECT"]] == s)
+    if (nrow(d) == 0) return(NULL)
+    lbl     <- unique(d[["subj_label"]])[1]
+    yr_val  <- unique(d[["YEAR_chr"]])[1]
+    bounds  <- make_bounds_df(s, levels(d[["grade_lbl"]]), yr_val)
+    p <- ggplot2::ggplot(d, ggplot2::aes(x = YEAR_chr, y = value, group = 1)) +
+      ggplot2::geom_line() +
+      ggplot2::geom_point() +
+      ggplot2::facet_wrap(~ grade_lbl, scales = "free_y") +
+      ggplot2::labs(title = lbl, x = NULL, y = "Mean Scale Score") +
+      ggplot2::theme_bw() +
+      ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+    if (!is.null(bounds))
+      p <- p + ggplot2::geom_blank(
+        data = bounds, ggplot2::aes(x = YEAR_chr, y = bound)
+      )
+    p
+  }), subjects)
+  mean_trend <- Filter(Negate(is.null), mean_trend)
 
-  # ---- 2. Mean ± SD bands ----
+  # ---- 2. Mean ± SD bands — one plot per subject, grades as facets ----
   d_meansd <- wide |>
     dplyr::select(dplyr::all_of(c("YEAR", "YEAR_chr", "SUBJECT", "subj_label",
                                    "GRADE", "grade_lbl", "mean", "sd"))) |>
@@ -318,21 +356,30 @@ plot_score_trends <- function(score_summary, assessment_spec) {
       upper = .data[["mean_val"]] + .data[["sd_val"]]
     )
 
-  p_meansd <- ggplot2::ggplot(
-    d_meansd,
-    ggplot2::aes(x = YEAR_chr, y = mean_val,
-                 group = grade_lbl, color = grade_lbl, fill = grade_lbl)
-  ) +
-    ggplot2::geom_ribbon(ggplot2::aes(ymin = lower, ymax = upper),
-                         alpha = 0.15, color = NA) +
-    ggplot2::geom_line() +
-    ggplot2::geom_point() +
-    ggplot2::facet_wrap(~ subj_label, nrow = 1) +
-    ggplot2::labs(x = NULL, y = "Scale Score", color = "Grade", fill = "Grade") +
-    ggplot2::theme_bw() +
-    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+  mean_sd <- setNames(lapply(subjects, function(s) {
+    d <- d_meansd |> dplyr::filter(.data[["SUBJECT"]] == s)
+    if (nrow(d) == 0) return(NULL)
+    lbl    <- unique(d[["subj_label"]])[1]
+    yr_val <- unique(d[["YEAR_chr"]])[1]
+    bounds <- make_bounds_df(s, levels(d[["grade_lbl"]]), yr_val)
+    p <- ggplot2::ggplot(d, ggplot2::aes(x = YEAR_chr, y = mean_val, group = 1)) +
+      ggplot2::geom_ribbon(ggplot2::aes(ymin = lower, ymax = upper),
+                           alpha = 0.15, fill = "steelblue", color = NA) +
+      ggplot2::geom_line() +
+      ggplot2::geom_point() +
+      ggplot2::facet_wrap(~ grade_lbl, scales = "free_y") +
+      ggplot2::labs(title = lbl, x = NULL, y = "Scale Score") +
+      ggplot2::theme_bw() +
+      ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+    if (!is.null(bounds))
+      p <- p + ggplot2::geom_blank(
+        data = bounds, ggplot2::aes(x = YEAR_chr, y = bound)
+      )
+    p
+  }), subjects)
+  mean_sd <- Filter(Negate(is.null), mean_sd)
 
-  # ---- 3. Median with IQR ----
+  # ---- 3. Median with IQR — one plot per subject, grades as facets ----
   has_iqr <- all(c("p25", "p50", "p75") %in% names(wide))
 
   if (has_iqr) {
@@ -342,44 +389,48 @@ plot_score_trends <- function(score_summary, assessment_spec) {
       dplyr::filter(!is.na(.data[["p50"]])) |>
       dplyr::rename(p25_val = "p25", p50_val = "p50", p75_val = "p75")
 
-    p_iqr <- ggplot2::ggplot(
-      d_iqr,
-      ggplot2::aes(x = YEAR_chr, y = p50_val,
-                   group = grade_lbl, color = grade_lbl, fill = grade_lbl)
-    ) +
-      ggplot2::geom_ribbon(ggplot2::aes(ymin = p25_val, ymax = p75_val),
-                           alpha = 0.15, color = NA) +
-      ggplot2::geom_line() +
-      ggplot2::geom_point() +
-      ggplot2::facet_wrap(~ subj_label, nrow = 1) +
-      ggplot2::labs(x = NULL, y = "Scale Score", color = "Grade", fill = "Grade") +
-      ggplot2::theme_bw() +
-      ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+    median_iqr <- setNames(lapply(subjects, function(s) {
+      d <- d_iqr |> dplyr::filter(.data[["SUBJECT"]] == s)
+      if (nrow(d) == 0) return(NULL)
+      lbl <- unique(d[["subj_label"]])[1]
+      ggplot2::ggplot(d, ggplot2::aes(x = YEAR_chr, y = p50_val, group = 1)) +
+        ggplot2::geom_ribbon(ggplot2::aes(ymin = p25_val, ymax = p75_val),
+                             alpha = 0.15, fill = "steelblue", color = NA) +
+        ggplot2::geom_line() +
+        ggplot2::geom_point() +
+        ggplot2::facet_wrap(~ grade_lbl) +
+        ggplot2::labs(title = lbl, x = NULL, y = "Scale Score") +
+        ggplot2::theme_bw() +
+        ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+    }), subjects)
+    median_iqr <- Filter(Negate(is.null), median_iqr)
   } else {
-    p_iqr <- NULL
+    median_iqr <- NULL
   }
 
-  # ---- 4. Grade profile (grade on x, year as color) ----
+  # ---- 4. Grade profile (grade on x, year as color) — one plot per subject ----
   d_profile <- long |>
     dplyr::filter(.data[["metric"]] == "mean", !is.na(.data[["value"]]))
 
-  p_profile <- ggplot2::ggplot(
-    d_profile,
-    ggplot2::aes(x = grade_lbl, y = value,
-                 group = YEAR_chr, color = YEAR_chr)
-  ) +
-    ggplot2::geom_line() +
-    ggplot2::geom_point() +
-    ggplot2::facet_wrap(~ subj_label, nrow = 1) +
-    ggplot2::labs(x = NULL, y = "Mean Scale Score", color = "Year") +
-    ggplot2::theme_bw() +
-    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+  grade_profile <- setNames(lapply(subjects, function(s) {
+    d <- d_profile |> dplyr::filter(.data[["SUBJECT"]] == s)
+    if (nrow(d) == 0) return(NULL)
+    lbl <- unique(d[["subj_label"]])[1]
+    ggplot2::ggplot(d, ggplot2::aes(x = grade_lbl, y = value,
+                                    group = YEAR_chr, color = YEAR_chr)) +
+      ggplot2::geom_line() +
+      ggplot2::geom_point() +
+      ggplot2::labs(title = lbl, x = NULL, y = "Mean Scale Score", color = "Year") +
+      ggplot2::theme_bw() +
+      ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+  }), subjects)
+  grade_profile <- Filter(Negate(is.null), grade_profile)
 
   list(
-    mean_trend    = p_mean,
-    mean_sd       = p_meansd,
-    median_iqr    = p_iqr,
-    grade_profile = p_profile
+    mean_trend    = mean_trend,
+    mean_sd       = mean_sd,
+    median_iqr    = median_iqr,
+    grade_profile = grade_profile
   )
 }
 
@@ -407,7 +458,8 @@ plot_score_trends <- function(score_summary, assessment_spec) {
 #' ss <- compute_score_summary(demo_data, assessment_spec)
 #' summarize_score_trends(ss, assessment_spec)$narrative
 #' }
-summarize_score_trends <- function(score_summary, assessment_spec) {
+summarize_score_trends <- function(score_summary, assessment_spec,
+                                   flat_threshold = 1.0) {
   stopifnot(
     is.list(score_summary),
     !is.null(score_summary$ScaleScore_Stats_Wide),
@@ -428,12 +480,24 @@ summarize_score_trends <- function(score_summary, assessment_spec) {
       subj_label = dplyr::coalesce(.data[["subj_label"]], .data[["SUBJECT"]])
     )
 
+  trend_arrow <- function(delta) {
+    if (abs(delta) < flat_threshold) "→" else if (delta > 0) "↑" else "↓"
+  }
+  trend_desc <- function(delta) {
+    pts <- paste0(round(abs(delta), 1), " points")
+    if (abs(delta) < flat_threshold) paste0(pts, " (relatively flat)") else pts
+  }
+
+  all_yrs    <- sort(unique(wide[["YEAR"]]))
+  first_yr   <- all_yrs[1]
+  last_yr    <- all_yrs[length(all_yrs)]
+
   subjects <- unique(wide[["SUBJECT"]])
   by_subject <- vector("list", length(subjects))
   names(by_subject) <- subjects
 
   for (s in subjects) {
-    d_s  <- wide |>
+    d_s <- wide |>
       dplyr::filter(.data[["SUBJECT"]] == s) |>
       dplyr::arrange(.data[["YEAR"]])
 
@@ -441,42 +505,52 @@ summarize_score_trends <- function(score_summary, assessment_spec) {
     yrs  <- sort(unique(d_s[["YEAR"]]))
 
     if (length(yrs) < 2) {
-      by_subject[[s]] <- paste0("Only one year of data available for ", lbl, ".")
+      by_subject[[s]] <- paste0("**", lbl, ":** Only one year of data available.")
       next
     }
 
-    first_yr <- yrs[1]
-    last_yr  <- yrs[length(yrs)]
-
-    d_first <- d_s |> dplyr::filter(.data[["YEAR"]] == first_yr)
-    d_last  <- d_s |> dplyr::filter(.data[["YEAR"]] == last_yr)
-
     changes <- dplyr::inner_join(
-      d_first |> dplyr::select("GRADE", mean_first = "mean"),
-      d_last  |> dplyr::select("GRADE", mean_last  = "mean"),
+      d_s |> dplyr::filter(.data[["YEAR"]] == first_yr) |>
+        dplyr::select("GRADE", mean_first = "mean"),
+      d_s |> dplyr::filter(.data[["YEAR"]] == last_yr) |>
+        dplyr::select("GRADE", mean_last = "mean"),
       by = "GRADE"
     ) |>
       dplyr::mutate(delta = .data[["mean_last"]] - .data[["mean_first"]]) |>
-      dplyr::filter(!is.na(.data[["delta"]]))
+      dplyr::filter(!is.na(.data[["delta"]])) |>
+      dplyr::arrange(grade_key(.data[["GRADE"]]))
 
     if (nrow(changes) == 0) {
-      by_subject[[s]] <- paste0("Insufficient data to compute changes for ", lbl, ".")
+      by_subject[[s]] <- paste0("**", lbl, ":** Insufficient data to compute changes.")
       next
     }
 
-    overall_delta <- mean(changes[["delta"]], na.rm = TRUE)
-    direction     <- if (overall_delta > 0) "increased" else "decreased"
-    by_subject[[s]] <- paste0(
-      lbl, ": mean scores ", direction, " by an average of ",
-      round(abs(overall_delta), 1), " points from ", first_yr, " to ", last_yr,
-      " across ", nrow(changes), " grade(s)."
-    )
+    eoc <- all(is.na(changes[["GRADE"]]))
+
+    if (eoc) {
+      delta <- changes[["delta"]][1]
+      by_subject[[s]] <- paste0(
+        "**", lbl, ":** ", trend_arrow(delta), " ", trend_desc(delta),
+        " (", first_yr, " → ", last_yr, ")"
+      )
+    } else {
+      grade_bullets <- vapply(seq_len(nrow(changes)), function(i) {
+        g     <- changes[["GRADE"]][i]
+        delta <- changes[["delta"]][i]
+        g_lbl <- if (is.na(g)) "" else paste0("Grade ", g)
+        paste0("* ", g_lbl, ": ", trend_arrow(delta), " ", trend_desc(delta),
+               " (", first_yr, " → ", last_yr, ")")
+      }, character(1))
+      by_subject[[s]] <- paste0(
+        "**", lbl, "**\n\n",
+        paste(grade_bullets, collapse = "\n")
+      )
+    }
   }
 
-  bullets <- paste0("- ", unlist(by_subject), collapse = "\n")
   narrative <- paste0(
-    "The following summarizes changes in mean scale scores from the first to ",
-    "the last reported year:\n\n", bullets
+    "Changes in mean scale scores from ", first_yr, " to ", last_yr, ":\n\n",
+    paste(unlist(by_subject), collapse = "\n\n")
   )
 
   list(
@@ -502,6 +576,8 @@ summarize_score_trends <- function(score_summary, assessment_spec) {
 #' @param assessment_spec Named list describing the assessment program.
 #' @param min_n Integer. Minimum group size for small-n suppression. Default
 #'   `10`.
+#' @param flat_threshold Numeric. Changes smaller than this (in scale score
+#'   points) are labelled "relatively flat" in the narrative. Default `1.0`.
 #'
 #' @return A named list:
 #'   * `$table` — `ScaleScore_Stats_Report` wide table
@@ -517,7 +593,8 @@ summarize_score_trends <- function(score_summary, assessment_spec) {
 #' }
 run_score_trends <- function(student_results_long,
                              assessment_spec,
-                             min_n = 10) {
+                             min_n          = 10,
+                             flat_threshold = 1.0) {
   stopifnot(
     is.data.frame(student_results_long),
     is.list(assessment_spec)
@@ -525,7 +602,7 @@ run_score_trends <- function(student_results_long,
 
   ss   <- compute_score_summary(student_results_long, assessment_spec, min_n = min_n)
   plt  <- plot_score_trends(ss, assessment_spec)
-  txt  <- summarize_score_trends(ss, assessment_spec)
+  txt  <- summarize_score_trends(ss, assessment_spec, flat_threshold = flat_threshold)
 
   list(
     table = ss$ScaleScore_Stats_Report,

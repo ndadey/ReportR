@@ -2,16 +2,51 @@
 # Line 1 — General Trend Analysis: Score Distributions
 #
 # Functions:
-#   plot_score_density()      — kernel density plots per subject
-#   summarize_score_density() — narrative text
-#   run_score_density()       — orchestrator
+#   .build_grade_density_plot() — package-level helper (not exported)
+#   plot_score_density()        — kernel density plots per subject
+#   summarize_score_density()   — narrative text
+#   run_score_density()         — orchestrator
 # ==============================================================================
+
+# Package-level helper — builds one per-grade density plot from pre-computed
+# kernel density curves. Defined OUTSIDE plot_score_density() so its
+# environment never holds student_results_long; ggplot quosures therefore
+# capture only small objects.
+.build_grade_density_plot <- function(dens_dat, ann_text_g, g_lbl,
+                                       x_lo, x_hi, loss_val, hoss_val,
+                                       has_lh) {
+  pg <- ggplot2::ggplot(
+    dens_dat,
+    ggplot2::aes(x = .data[["x"]], y = .data[["y"]],
+                 color = .data[["YEAR_chr"]], group = .data[["YEAR_chr"]])
+  ) +
+    ggplot2::geom_line(linewidth = 0.7) +
+    ggplot2::annotate("text", x = -Inf, y = Inf, label = ann_text_g,
+                      hjust = -0.03, vjust = 1.1,
+                      size = 2.2, color = "grey25") +
+    ggplot2::labs(title = g_lbl, x = "Scale Score",
+                  y = "Density", color = "Year") +
+    ggplot2::theme_bw() +
+    ggplot2::theme(legend.position = "bottom")
+
+  if (!is.na(x_lo) && !is.na(x_hi)) {
+    pg <- pg + ggplot2::coord_cartesian(xlim = c(x_lo, x_hi))
+  }
+  if (has_lh && !is.na(loss_val) && !is.na(hoss_val)) {
+    pg <- pg +
+      ggplot2::geom_vline(xintercept = hoss_val, linetype = "dashed",
+                          color = "#cc0000", linewidth = 0.7) +
+      ggplot2::geom_vline(xintercept = loss_val, linetype = "dashed",
+                          color = "#1565c0", linewidth = 0.7)
+  }
+  pg
+}
 
 
 #' Plot scale score distributions by subject
 #'
 #' Creates one kernel density plot per subject. Within each plot, grades are
-#' shown as facets and years are overlaid as separate coloured curves. The
+#' shown as facets and years are overlaid as separate colored curves. The
 #' x-axis is constrained to the LOSS/HOSS range for that subject (with a small
 #' margin) using `assessment_spec`.
 #'
@@ -73,7 +108,7 @@ plot_score_density <- function(student_results_long,
     }
 
     # Grade factor ordering
-    grade_vals <- sort(unique(as.integer(d_s[["GRADE"]])))
+    grade_vals   <- sort(unique(as.integer(d_s[["GRADE"]])))
     grade_levels <- paste0("Grade ", grade_vals)
 
     d_s <- d_s |>
@@ -85,45 +120,113 @@ plot_score_density <- function(student_results_long,
         YEAR_chr  = as.character(.data[["YEAR"]])
       )
 
-    # X-axis limits from LOSS/HOSS across all grades in this subject
-    x_margin <- 10
-    if (!is.null(grades_in_spec)) {
-      loss_hoss_vals <- lapply(grades_in_spec, function(g) {
-        ss <- get_score_spec(assessment_spec, s, g)
-        if (is.null(ss)) return(NULL)
-        c(ss$loss, ss$hoss)
+    # Per-grade LOSS/HOSS — drives boundary lines and free_x scale anchoring
+    lh_data <- do.call(rbind, lapply(grade_vals, function(g) {
+      ss <- get_score_spec(assessment_spec, s, g)
+      if (is.null(ss)) return(NULL)
+      data.frame(
+        grade_lbl = factor(paste0("Grade ", g), levels = grade_levels),
+        loss      = ss$loss,
+        hoss      = ss$hoss,
+        stringsAsFactors = FALSE
+      )
+    }))
+
+    has_lh <- !is.null(lh_data) && nrow(lh_data) > 0
+
+    # Per-year stats (mean, SD, N) per YEAR x GRADE for annotation
+    stats_df <- d_s |>
+      dplyr::group_by(.data[["grade_lbl"]], .data[["YEAR_chr"]]) |>
+      dplyr::summarize(
+        n_obs   = dplyr::n(),
+        mean_ss = round(mean(.data[["SCALE_SCORE"]], na.rm = TRUE), 1),
+        sd_ss   = round(stats::sd(.data[["SCALE_SCORE"]], na.rm = TRUE), 1),
+        .groups = "drop"
+      ) |>
+      dplyr::arrange(.data[["grade_lbl"]], .data[["YEAR_chr"]]) |>
+      dplyr::mutate(
+        ann_line = sprintf("%s  Mean: %.1f  SD: %.1f  N: %d",
+                           .data[["YEAR_chr"]], .data[["mean_ss"]],
+                           .data[["sd_ss"]], .data[["n_obs"]])
+      )
+
+    ann_df <- stats_df |>
+      dplyr::group_by(.data[["grade_lbl"]]) |>
+      dplyr::summarize(
+        ann_text = paste(.data[["ann_line"]], collapse = "\n"),
+        .groups  = "drop"
+      )
+
+    # Build one ggplot per grade — pre-compute density curves (512 pts/year)
+    # and delegate to package-level helper so quosures never capture
+    # student_results_long.
+    grade_plots <- lapply(grade_vals, function(g) {
+      g_lbl <- paste0("Grade ", g)
+      d_g   <- d_s[as.character(d_s[["grade_lbl"]]) == g_lbl, ]
+      if (nrow(d_g) == 0L) return(NULL)
+
+      ann_text_g <- ""
+      ann_row <- ann_df[as.character(ann_df[["grade_lbl"]]) == g_lbl, ]
+      if (nrow(ann_row) > 0L) ann_text_g <- ann_row[["ann_text"]][1L]
+
+      # Per-year kernel density (512 pts) — avoids storing raw scores in ggplot
+      yrs_g <- sort(unique(d_g[["YEAR_chr"]]))
+      dens_rows <- lapply(yrs_g, function(yr) {
+        scores <- d_g[["SCALE_SCORE"]][d_g[["YEAR_chr"]] == yr &
+                                       !is.na(d_g[["SCALE_SCORE"]])]
+        if (length(scores) < 2L) return(NULL)
+        lh_row <- if (has_lh)
+          lh_data[as.character(lh_data[["grade_lbl"]]) == g_lbl, ]
+        else
+          data.frame(loss = NA_real_, hoss = NA_real_)
+        x_from <- if (nrow(lh_row) > 0L && !is.na(lh_row[["loss"]][1L]))
+          lh_row[["loss"]][1L] else min(scores)
+        x_to   <- if (nrow(lh_row) > 0L && !is.na(lh_row[["hoss"]][1L]))
+          lh_row[["hoss"]][1L] else max(scores)
+        d    <- stats::density(scores, n = 512L, from = x_from, to = x_to)
+        data.frame(x = d$x, y = d$y, YEAR_chr = yr)
       })
-    } else {
-      ss <- get_score_spec(assessment_spec, s)
-      loss_hoss_vals <- if (!is.null(ss)) list(c(ss$loss, ss$hoss)) else NULL
+      dens_dat <- do.call(rbind, dens_rows)
+      if (is.null(dens_dat) || nrow(dens_dat) == 0L) return(NULL)
+
+      lh_row   <- if (has_lh)
+        lh_data[as.character(lh_data[["grade_lbl"]]) == g_lbl, ]
+      else
+        data.frame(loss = NA_real_, hoss = NA_real_)
+      loss_val <- if (nrow(lh_row) > 0L) lh_row[["loss"]][1L] else NA_real_
+      hoss_val <- if (nrow(lh_row) > 0L) lh_row[["hoss"]][1L] else NA_real_
+
+      .build_grade_density_plot(dens_dat, ann_text_g, g_lbl,
+                                 x_lo = loss_val, x_hi = hoss_val,
+                                 loss_val = loss_val, hoss_val = hoss_val,
+                                 has_lh = has_lh)
+    })
+    grade_plots <- Filter(Negate(is.null), grade_plots)
+
+    if (length(grade_plots) == 0) {
+      out[[s]] <- NULL
+      next
     }
 
-    loss_hoss_vals <- loss_hoss_vals[!vapply(loss_hoss_vals, is.null, logical(1))]
-
-    if (length(loss_hoss_vals) > 0) {
-      all_vals <- unlist(loss_hoss_vals)
-      x_lo <- min(all_vals) - x_margin
-      x_hi <- max(all_vals) + x_margin
+    if (requireNamespace("patchwork", quietly = TRUE)) {
+      p <- patchwork::wrap_plots(grade_plots, ncol = 2) +
+        patchwork::plot_annotation(title = subj_label)
     } else {
-      x_lo <- min(d_s[["SCALE_SCORE"]], na.rm = TRUE) - x_margin
-      x_hi <- max(d_s[["SCALE_SCORE"]], na.rm = TRUE) + x_margin
-    }
-
-    p <- ggplot2::ggplot(
-      d_s,
-      ggplot2::aes(x = SCALE_SCORE, color = YEAR_chr, group = YEAR_chr)
-    ) +
-      ggplot2::geom_density(adjust = 1, na.rm = TRUE) +
-      ggplot2::facet_wrap(~ grade_lbl, nrow = 1) +
-      ggplot2::coord_cartesian(xlim = c(x_lo, x_hi)) +
-      ggplot2::labs(
-        title  = subj_label,
-        x      = "Scale Score",
-        y      = "Density",
-        color  = "Year"
+      # fallback: single plot with facets and subject-wide x range
+      x_lim <- if (has_lh) c(min(lh_data[["loss"]]), max(lh_data[["hoss"]])) else NULL
+      p <- ggplot2::ggplot(
+        d_s,
+        ggplot2::aes(x = SCALE_SCORE, color = YEAR_chr, group = YEAR_chr)
       ) +
-      ggplot2::theme_bw() +
-      ggplot2::theme(legend.position = "bottom")
+        ggplot2::geom_density(adjust = 1, na.rm = TRUE) +
+        ggplot2::facet_wrap(~ grade_lbl, ncol = 2) +
+        ggplot2::labs(title = subj_label, x = "Scale Score",
+                      y = "Density", color = "Year") +
+        ggplot2::theme_bw() +
+        ggplot2::theme(legend.position = "bottom")
+      if (!is.null(x_lim))
+        p <- p + ggplot2::coord_cartesian(xlim = x_lim)
+    }
 
     out[[s]] <- p
   }

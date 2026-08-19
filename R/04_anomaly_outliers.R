@@ -7,7 +7,7 @@
 #
 # Functions:
 #   compute_outliers()     — flag year-to-year outlier cells
-#   plot_outliers()        — visualise flagged outliers
+#   plot_outliers()        — visualize flagged outliers
 #   summarize_outliers()   — narrative summary of flagged cells
 #   run_outliers()         — entry point; returns the sub-list
 # ==============================================================================
@@ -70,7 +70,7 @@ compute_outliers <- function(student_results_long,
     dplyr::group_by(
       .data[["YEAR"]], .data[["SUBJECT"]], .data[["GRADE"]]
     ) |>
-    dplyr::summarise(
+    dplyr::summarize(
       n = dplyr::n(),
       mean_score = mean(.data[["SCALE_SCORE"]], na.rm = TRUE),
       pct_proficient = mean(
@@ -97,7 +97,7 @@ compute_outliers <- function(student_results_long,
         dplyr::group_by(
           .data[["YEAR"]], .data[["SUBJECT"]], .data[["GRADE"]]
         ) |>
-        dplyr::summarise(
+        dplyr::summarize(
           n_grp = sum(!is.na(.data[[v]])),
           pct_v = mean(.is_positive_flag(.data[[v]]), na.rm = TRUE) * 100,
           .groups = "drop"
@@ -148,7 +148,7 @@ compute_outliers <- function(student_results_long,
     dplyr::ungroup()
 
   # ------------------------------------------------------------------
-  # Step 3 — standardise deltas; flag outliers at ±2 SD (Mild) / ±3 SD (Severe)
+  # Step 3 — standardize deltas; flag outliers at ±2 SD (Mild) / ±3 SD (Severe)
   # ------------------------------------------------------------------
   delta_names <- paste0("delta_", delta_cols)
 

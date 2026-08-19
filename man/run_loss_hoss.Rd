@@ -40,7 +40,7 @@ A named list with elements:
 }
 \description{
 Orchestrates \code{compute_loss_hoss_table()}, all four plot functions, and
-\code{summarize_loss_hoss_findings()} into the standardised sub-list consumed by
+\code{summarize_loss_hoss_findings()} into the standardized sub-list consumed by
 \code{\link[=run_anomaly_analysis]{run_anomaly_analysis()}}.
 }
 \examples{

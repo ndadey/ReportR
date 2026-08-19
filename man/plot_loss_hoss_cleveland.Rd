@@ -22,7 +22,7 @@ A \code{ggplot} object.
 }
 \description{
 Displays the percentage of students near the LOSS or HOSS boundary for each
-grade (y-axis), with years differentiated by colour. A horizontal line spans
+grade (y-axis), with years differentiated by color. A horizontal line spans
 the min–max range across years for each grade to show year-to-year movement.
 Faceted by subject with subjects arranged as columns so the plot stays
 page-width and fits comfortably on a portrait page.

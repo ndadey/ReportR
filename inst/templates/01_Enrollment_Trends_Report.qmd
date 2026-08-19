@@ -1,0 +1,528 @@
+---
+title: "Section 1.2. Enrollment Trends"
+format:
+  docx:
+    toc: true
+    number-sections: true
+    fig-dpi: 300
+  html:
+    toc: true
+    toc-float: true
+    code-fold: true
+editor: visual
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  pkg_path:     null
+  spec_file:    null
+  results_file: null
+  min_n:        10
+---
+
+```{r setup}
+pkg_root <- params$pkg_path
+
+if (!is.null(pkg_root) &&
+    file.exists(file.path(pkg_root, "DESCRIPTION")) &&
+    file.exists(file.path(pkg_root, "R"))) {
+  devtools::load_all(pkg_root)
+} else {
+  library(ReportR)
+}
+
+spec_path <- if (!is.null(params$spec_file) && file.exists(params$spec_file)) {
+  params$spec_file
+} else if (!is.null(pkg_root) && !is.null(params$spec_file)) {
+  file.path(pkg_root, params$spec_file)
+} else {
+  NULL
+}
+if (!is.null(spec_path)) source(spec_path)
+
+enrollment_results <- readRDS(params$results_file)
+min_n              <- params$min_n
+
+# Subject label lookup — used throughout for readable column/row labels
+subj_lookup <- data.frame(
+  SUBJECT = names(assessment_spec$subjects),
+  Subject = vapply(names(assessment_spec$subjects),
+                   function(s) assessment_spec$subjects[[s]]$label,
+                   character(1)),
+  stringsAsFactors = FALSE
+)
+
+# Standard flextable formatter
+fmt_ft <- function(ft) {
+  ft |>
+    flextable::bold(part = "header") |>
+    flextable::fontsize(size = 9, part = "all") |>
+    flextable::set_table_properties(layout = "autofit", width = 1)
+}
+```
+
+## Introduction
+
+```{r subtitle, results='asis'}
+cat("###", assessment_spec$program$name, "\n")
+```
+
+```{r intro-narrative, results='asis'}
+cat(enrollment_results$text$narrative, "\n")
+```
+
+------------------------------------------------------------------------
+
+## Total Enrollment Over Time
+
+```{r tbl-overall, tab.cap="Total Unique Students by Year"}
+by_year <- enrollment_results$counts$by_year
+
+if (!is.null(by_year) && nrow(by_year) > 0) {
+  yr_order  <- sort(unique(by_year$YEAR))
+  stat_cols <- c(paste0(yr_order, "_N"), paste0(yr_order, "_Change"))
+
+  wide <- by_year |>
+    dplyr::mutate(
+      Change = ifelse(suppressed | is.na(N_change), NA_real_,
+                      round(N_change, 0))
+    ) |>
+    dplyr::select(YEAR, N, Change) |>
+    tidyr::pivot_longer(cols = c("N", "Change"),
+                        names_to = "stat", values_to = "value") |>
+    dplyr::mutate(col_name = paste0(YEAR, "_", stat)) |>
+    dplyr::select(-YEAR, -stat) |>
+    tidyr::pivot_wider(names_from = col_name, values_from = value) |>
+    dplyr::mutate(Metric = "Total Students") |>
+    dplyr::select(Metric, dplyr::any_of(stat_cols))
+
+  fmt_ft(flextable::flextable(wide))
+} else {
+  cat("*No year-level enrollment data available.*\n")
+}
+```
+
+### Enrollment by Grade
+
+```{r tbl-by-grade, tab.cap="Enrollment by Year and Grade"}
+by_grade <- enrollment_results$counts$by_year_grade
+
+if (!is.null(by_grade) && nrow(by_grade) > 0) {
+  yr_order  <- sort(unique(by_grade$YEAR))
+  stat_cols <- c(paste0(yr_order, "_N"), paste0(yr_order, "_Change"))
+
+  wide <- by_grade |>
+    dplyr::mutate(
+      Change = ifelse(suppressed | is.na(N_change), NA_real_,
+                      round(N_change, 0))
+    ) |>
+    dplyr::select(YEAR, GRADE, N, Change) |>
+    tidyr::pivot_longer(cols = c("N", "Change"),
+                        names_to = "stat", values_to = "value") |>
+    dplyr::mutate(col_name = paste0(YEAR, "_", stat)) |>
+    dplyr::select(-YEAR, -stat) |>
+    tidyr::pivot_wider(names_from = col_name, values_from = value) |>
+    dplyr::select(GRADE, dplyr::any_of(stat_cols)) |>
+    dplyr::arrange(grade_key(GRADE))
+
+  fmt_ft(flextable::flextable(wide))
+} else {
+  cat("*No grade-level enrollment data available.*\n")
+}
+```
+
+### Enrollment by Subject
+
+```{r tbl-by-subject, tab.cap="Enrollment by Year and Subject"}
+by_subj <- enrollment_results$counts$by_year_subject
+
+if (!is.null(by_subj) && nrow(by_subj) > 0) {
+  yr_order  <- sort(unique(by_subj$YEAR))
+  stat_cols <- c(paste0(yr_order, "_N"), paste0(yr_order, "_Change"))
+
+  wide <- by_subj |>
+    dplyr::left_join(subj_lookup, by = "SUBJECT") |>
+    dplyr::mutate(
+      Subject = dplyr::coalesce(Subject, SUBJECT),
+      Change  = ifelse(suppressed | is.na(N_change), NA_real_,
+                       round(N_change, 0))
+    ) |>
+    dplyr::select(Subject, YEAR, N, Change) |>
+    tidyr::pivot_longer(cols = c("N", "Change"),
+                        names_to = "stat", values_to = "value") |>
+    dplyr::mutate(col_name = paste0(YEAR, "_", stat)) |>
+    dplyr::select(-YEAR, -stat) |>
+    tidyr::pivot_wider(names_from = col_name, values_from = value) |>
+    dplyr::select(Subject, dplyr::any_of(stat_cols))
+
+  fmt_ft(flextable::flextable(wide))
+} else {
+  cat("*No subject-level enrollment data available.*\n")
+}
+```
+
+------------------------------------------------------------------------
+
+## Subgroup Composition
+
+The tables in this section show how the demographic composition of the tested population has shifted over time. Values are percent of students in each category within each year. Cells with fewer than `r min_n` students are suppressed.
+
+### Proportion of Students by Subgroup
+
+```{r tbl-subgroup-props, tab.cap="Subgroup Composition by Year: N, %, and Year-over-Year Changes"}
+by_sg <- enrollment_results$proportions$by_subgroup
+
+if (!is.null(by_sg) && nrow(by_sg) > 0) {
+  yr_order <- sort(unique(by_sg$YEAR))
+
+  # Compute year-over-year changes within each subgroup_var × subgroup_val
+  by_sg_ext <- by_sg |>
+    dplyr::arrange(subgroup_var, subgroup_val, YEAR) |>
+    dplyr::group_by(subgroup_var, subgroup_val) |>
+    dplyr::mutate(
+      dN   = as.numeric(N) - dplyr::lag(as.numeric(N)),
+      dPct = round(pct - dplyr::lag(pct), 1)
+    ) |>
+    dplyr::ungroup() |>
+    dplyr::mutate(
+      Pct  = ifelse(suppressed | is.na(pct),  NA_real_, round(pct, 1)),
+      N    = ifelse(suppressed,                NA_real_, as.numeric(N)),
+      dN   = ifelse(suppressed | is.na(dN),   NA_real_, round(dN, 0)),
+      dPct = ifelse(suppressed | is.na(dPct), NA_real_, dPct)
+    )
+
+  # Column order: first year gets N + Pct only; each later year gets N, Pct, dN, dPct
+  stat_cols <- c(
+    paste0(yr_order[1], "_N"),
+    paste0(yr_order[1], "_Pct"),
+    unlist(lapply(yr_order[-1], function(yr)
+      c(paste0(yr, "_N"), paste0(yr, "_Pct"),
+        paste0(yr, "_dN"), paste0(yr, "_dPct"))))
+  )
+
+  wide <- by_sg_ext |>
+    dplyr::select(subgroup_var, subgroup_val, YEAR, N, Pct, dN, dPct) |>
+    tidyr::pivot_longer(cols = c("N", "Pct", "dN", "dPct"),
+                        names_to = "stat", values_to = "value") |>
+    dplyr::mutate(col_name = paste0(YEAR, "_", stat)) |>
+    dplyr::select(-YEAR, -stat) |>
+    tidyr::pivot_wider(names_from = col_name, values_from = value) |>
+    dplyr::select(subgroup_var, subgroup_val, dplyr::any_of(stat_cols)) |>
+    dplyr::arrange(subgroup_var, subgroup_val)
+
+  fmt_ft(
+    flextable::flextable(wide) |>
+      flextable::set_header_labels(subgroup_var = "Variable",
+                                   subgroup_val = "Category") |>
+      flextable::merge_v(j = "subgroup_var") |>
+      flextable::add_footer_lines(
+        "N = student count; Pct = % of total; dN = change in N from prior year; dPct = change in Pct (pp)."
+      ) |>
+      flextable::fontsize(size = 8, part = "footer")
+  )
+} else {
+  cat("*No subgroup proportion data available.*\n")
+}
+```
+
+### Year-Over-Year Shifts in Subgroup Composition
+
+```{r tbl-transitions, tab.cap="Year-Over-Year Percentage-Point Changes in Subgroup Composition (pp)"}
+transitions <- enrollment_results$transitions
+
+all_smry <- do.call(rbind, lapply(names(transitions), function(sg) {
+  smry <- transitions[[sg]]$summary
+  if (is.null(smry) || nrow(smry) == 0) return(NULL)
+  smry
+}))
+
+if (is.null(all_smry) || nrow(all_smry) == 0) {
+  cat("*No transition data available.*\n")
+} else {
+  # Build readable year-pair labels (e.g. "2023-24")
+  all_smry <- all_smry |>
+    dplyr::mutate(
+      year_pair = paste0(prior_year, "–", YEAR),
+      Change    = round(pct_change, 1)
+    )
+
+  pair_order <- all_smry |>
+    dplyr::arrange(YEAR) |>
+    dplyr::pull(year_pair) |>
+    unique()
+
+  wide <- all_smry |>
+    dplyr::select(subgroup_var, subgroup_val, year_pair, Change) |>
+    tidyr::pivot_wider(names_from = year_pair, values_from = Change) |>
+    dplyr::select(subgroup_var, subgroup_val,
+                  dplyr::any_of(pair_order)) |>
+    dplyr::arrange(subgroup_var, subgroup_val)
+
+  fmt_ft(
+    flextable::flextable(wide) |>
+      flextable::set_header_labels(subgroup_var = "Variable",
+                                   subgroup_val = "Category") |>
+      flextable::merge_v(j = "subgroup_var") |>
+      flextable::add_footer_lines("Values are percentage-point changes from prior year.")  |>
+      flextable::fontsize(size = 8, part = "footer")
+  )
+}
+```
+
+### Enrollment Composition Diagrams
+
+```{r sankey-plots, results='asis', fig.height=5, fig.width=8}
+if (requireNamespace("ggalluvial", quietly = TRUE)) {
+  for (sg in names(enrollment_results$transitions)) {
+    tbl <- enrollment_results$transitions[[sg]]$table
+    if (!is.null(tbl) && nrow(tbl) > 0) {
+      cat("\n\n####", sg, "\n\n")
+      print(plot_enrollment_sankey(tbl, subgroup_var = sg,
+                                   assessment_spec = assessment_spec))
+    }
+  }
+} else {
+  cat("*Install the `ggalluvial` package to render Sankey diagrams.*\n")
+}
+```
+
+------------------------------------------------------------------------
+
+## School-Level Enrollment Patterns
+
+The table below summarizes the distribution of year-to-year enrollment changes across all schools. Each row represents one year-to-year transition; columns show where schools fell in the distribution of change.
+
+```{r school-change-dist, tab.cap="Distribution of Year-to-Year School Enrollment Changes"}
+agg_school <- enrollment_results$aggregate$school
+
+if (!is.null(agg_school) && is.list(agg_school) &&
+    !is.null(agg_school$totals) && nrow(agg_school$totals) > 0) {
+
+  # Identify the entity ID column (SCHOOL_NUMBER or SCHOOL_ID)
+  school_id_col <- intersect(c("SCHOOL_NUMBER", "SCHOOL_ID"),
+                              names(agg_school$totals))[1]
+
+  change_data <- agg_school$totals |>
+    dplyr::arrange(.data[[school_id_col]], .data[["YEAR"]]) |>
+    dplyr::group_by(.data[[school_id_col]]) |>
+    dplyr::mutate(year_pair = paste0(dplyr::lag(.data[["YEAR"]]), "–",
+                                     .data[["YEAR"]])) |>
+    dplyr::ungroup() |>
+    dplyr::filter(!is.na(.data[["N_change"]]))
+
+  dist_tbl <- change_data |>
+    dplyr::group_by(year_pair) |>
+    dplyr::summarize(
+      Schools   = dplyr::n(),
+      P10       = round(stats::quantile(N_change, 0.10, na.rm = TRUE)),
+      P25       = round(stats::quantile(N_change, 0.25, na.rm = TRUE)),
+      Median    = round(stats::median(N_change, na.rm = TRUE)),
+      P75       = round(stats::quantile(N_change, 0.75, na.rm = TRUE)),
+      P90       = round(stats::quantile(N_change, 0.90, na.rm = TRUE)),
+      Grew      = sum(N_change > 0, na.rm = TRUE),
+      Stable    = sum(N_change == 0, na.rm = TRUE),
+      Shrank    = sum(N_change < 0, na.rm = TRUE),
+      .groups   = "drop"
+    ) |>
+    dplyr::arrange(year_pair)
+
+  fmt_ft(
+    flextable::flextable(dist_tbl) |>
+      flextable::set_header_labels(year_pair = "Year Pair") |>
+      flextable::add_footer_lines(
+        "P10–P90 = 10th to 90th percentile of student-count change across schools. Grew/Stable/Shrank = number of schools."
+      ) |>
+      flextable::fontsize(size = 8, part = "footer")
+  )
+
+} else {
+  cat("*School-level data not available for this dataset.*\n")
+}
+```
+
+```{r school-change-plot, fig.width = 8, fig.height = 4}
+if (!is.null(agg_school) && is.list(agg_school) &&
+    !is.null(agg_school$totals) && nrow(agg_school$totals) > 0 &&
+    exists("change_data") && nrow(change_data) > 0) {
+
+  ggplot2::ggplot(change_data,
+                  ggplot2::aes(x = year_pair, y = N_change)) +
+    ggplot2::geom_boxplot(fill = "#9fc5e8", outlier.size = 0.8,
+                          outlier.alpha = 0.4) +
+    ggplot2::geom_hline(yintercept = 0, linetype = "dashed",
+                        color = "#cc0000", linewidth = 0.6) +
+    ggplot2::labs(
+      title = "Distribution of Year-to-Year School Enrollment Changes",
+      x     = NULL,
+      y     = "Change in Student Count"
+    ) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 30, hjust = 1))
+}
+```
+
+------------------------------------------------------------------------
+
+## District-Level Enrollment Patterns
+
+```{r district-change-dist, tab.cap="Distribution of Year-to-Year District Enrollment Changes"}
+agg_dist <- enrollment_results$aggregate$district
+
+if (!is.null(agg_dist) && is.list(agg_dist) &&
+    !is.null(agg_dist$totals) && nrow(agg_dist$totals) > 0) {
+
+  dist_id_col <- intersect(c("DISTRICT_NUMBER", "DISTRICT_ID"),
+                            names(agg_dist$totals))[1]
+
+  dist_change <- agg_dist$totals |>
+    dplyr::arrange(.data[[dist_id_col]], .data[["YEAR"]]) |>
+    dplyr::group_by(.data[[dist_id_col]]) |>
+    dplyr::mutate(year_pair = paste0(dplyr::lag(.data[["YEAR"]]), "–",
+                                     .data[["YEAR"]])) |>
+    dplyr::ungroup() |>
+    dplyr::filter(!is.na(.data[["N_change"]]))
+
+  dist_tbl2 <- dist_change |>
+    dplyr::group_by(year_pair) |>
+    dplyr::summarize(
+      Districts = dplyr::n(),
+      P10       = round(stats::quantile(N_change, 0.10, na.rm = TRUE)),
+      P25       = round(stats::quantile(N_change, 0.25, na.rm = TRUE)),
+      Median    = round(stats::median(N_change, na.rm = TRUE)),
+      P75       = round(stats::quantile(N_change, 0.75, na.rm = TRUE)),
+      P90       = round(stats::quantile(N_change, 0.90, na.rm = TRUE)),
+      Grew      = sum(N_change > 0, na.rm = TRUE),
+      Stable    = sum(N_change == 0, na.rm = TRUE),
+      Shrank    = sum(N_change < 0, na.rm = TRUE),
+      .groups   = "drop"
+    ) |>
+    dplyr::arrange(year_pair)
+
+  fmt_ft(
+    flextable::flextable(dist_tbl2) |>
+      flextable::set_header_labels(year_pair = "Year Pair") |>
+      flextable::add_footer_lines(
+        "P10–P90 = 10th to 90th percentile of student-count change across districts."
+      ) |>
+      flextable::fontsize(size = 8, part = "footer")
+  )
+
+} else {
+  cat("*District-level data not available for this dataset.*\n")
+}
+```
+
+```{r district-change-plot, fig.width = 8, fig.height = 4}
+if (!is.null(agg_dist) && is.list(agg_dist) &&
+    !is.null(agg_dist$totals) && nrow(agg_dist$totals) > 0 &&
+    exists("dist_change") && nrow(dist_change) > 0) {
+
+  ggplot2::ggplot(dist_change,
+                  ggplot2::aes(x = year_pair, y = N_change)) +
+    ggplot2::geom_boxplot(fill = "#9fc5e8", outlier.size = 1,
+                          outlier.alpha = 0.5) +
+    ggplot2::geom_hline(yintercept = 0, linetype = "dashed",
+                        color = "#cc0000", linewidth = 0.6) +
+    ggplot2::labs(
+      title = "Distribution of Year-to-Year District Enrollment Changes",
+      x     = NULL,
+      y     = "Change in Student Count"
+    ) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 30, hjust = 1))
+}
+```
+
+------------------------------------------------------------------------
+
+## Enrollment and Score Trends
+
+Year-to-year changes in total enrollment and mean scale score, shown together. Each point is one year transition for one subject; the year pair label identifies which transition it represents. Points in the upper-right quadrant indicate years when enrollment and scores both rose; lower-left indicates concurrent declines.
+
+```{r plot-enroll-vs-score, fig.width = 8, fig.height = 5}
+p <- enrollment_results$plot$enroll_vs_score
+if (!is.null(p)) print(p) else
+  cat("*Enrollment vs. score plot not available.*\n")
+```
+
+```{r tbl-enroll-vs-score, tab.cap="Year-to-Year Enrollment Change and Mean Score Change by Subject and Grade"}
+se <- enrollment_results$score_enrollment_trends
+
+if (!is.null(se) && nrow(se) > 0) {
+  yr_pairs  <- sort(unique(se$year_pair))
+  stat_cols <- as.vector(outer(yr_pairs, c("N_change", "delta_mean"),
+                               paste, sep = "_"))
+
+  wide <- se |>
+    dplyr::mutate(delta_mean = round(.data[["delta_mean"]], 2)) |>
+    dplyr::select(SUBJECT, GRADE, year_pair, N_change, delta_mean) |>
+    tidyr::pivot_longer(cols = c("N_change", "delta_mean"),
+                        names_to = "stat", values_to = "value") |>
+    dplyr::mutate(col_name = paste0(.data[["year_pair"]], "_", .data[["stat"]])) |>
+    dplyr::select(-year_pair, -stat) |>
+    tidyr::pivot_wider(names_from = col_name, values_from = value) |>
+    dplyr::select(SUBJECT, GRADE, dplyr::any_of(stat_cols)) |>
+    dplyr::arrange(SUBJECT, grade_key(GRADE))
+
+  fmt_ft(
+    flextable::flextable(wide) |>
+      flextable::set_header_labels(SUBJECT = "Subject", GRADE = "Grade") |>
+      flextable::merge_v(j = "SUBJECT") |>
+      flextable::add_footer_lines(
+        "N_change = year-to-year change in tested students. delta_mean = change in mean scale score (scale score points)."
+      ) |>
+      flextable::fontsize(size = 8, part = "footer")
+  )
+} else {
+  cat("*Enrollment vs. score data not available.*\n")
+}
+```
+
+------------------------------------------------------------------------
+
+## Entering, Continuing, and Exiting Students
+
+Students who appear in a given year but not the prior year are classified as **Entering**; those present in both the prior and current year are **Continuing**; those in the prior year but absent in the current year are **Exiting**. Performance statistics reflect the year the student was present and are suppressed when fewer than `r min_n` students are in the group.
+
+```{r tbl-entry-exit, tab.cap="Performance of Entering, Continuing, and Exiting Students by Year, Subject, and Grade"}
+entering   <- enrollment_results$entry_exit$entering
+exiting    <- enrollment_results$entry_exit$exiting
+continuing <- enrollment_results$entry_exit$continuing
+
+both <- dplyr::bind_rows(entering, exiting, continuing)
+
+if (!is.null(both) && nrow(both) > 0) {
+  yr_order  <- sort(unique(both$YEAR))
+  stat_cols <- as.vector(outer(yr_order, c("N", "MeanScore", "PctProf"),
+                               paste, sep = "_"))
+
+  row_id_cols <- intersect(c("group", "SUBJECT", "GRADE"), names(both))
+
+  wide <- both |>
+    dplyr::mutate(
+      MeanScore = ifelse(suppressed | is.na(mean_score), NA_real_,
+                         round(mean_score, 1)),
+      PctProf   = ifelse(suppressed | is.na(pct_proficient), NA_real_,
+                         round(pct_proficient, 1))
+    ) |>
+    dplyr::select(dplyr::all_of(row_id_cols), YEAR, N, MeanScore, PctProf) |>
+    tidyr::pivot_longer(cols = c("N", "MeanScore", "PctProf"),
+                        names_to = "stat", values_to = "value") |>
+    dplyr::mutate(col_name = paste0(YEAR, "_", stat)) |>
+    dplyr::select(-YEAR, -stat) |>
+    tidyr::pivot_wider(names_from = col_name, values_from = value) |>
+    dplyr::select(dplyr::all_of(row_id_cols), dplyr::any_of(stat_cols)) |>
+    dplyr::mutate(group = factor(group, levels = c("Entering", "Continuing", "Exiting"))) |>
+    dplyr::arrange(group, SUBJECT, grade_key(GRADE))
+
+  merge_cols <- intersect(c("group", "SUBJECT"), names(wide))
+
+  fmt_ft(
+    flextable::flextable(wide) |>
+      flextable::merge_v(j = merge_cols)
+  )
+} else {
+  cat("*Entry/exit tracking requires `STUDENT_ID` — not available for this dataset.*\n")
+}
+```

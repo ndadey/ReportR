@@ -79,25 +79,31 @@ compute_score_integrity <- function(student_results_long,
   lookup <- build_loss_hoss_lookup(assessment_spec)
 
   # Build cuts lookup separately (build_loss_hoss_lookup only returns LOSS/HOSS)
-  cuts_rows <- lapply(names(assessment_spec$scale_scores), function(key) {
-    ss    <- assessment_spec$scale_scores[[key]]
-    parts <- strsplit(key, "_")[[1]]
-    # Key is either "SUBJECT" (EOC) or "SUBJECT_GRADE"
-    # Use numeric check on last part to distinguish
-    last  <- parts[length(parts)]
-    if (!is.na(suppressWarnings(as.integer(last))) && length(parts) > 1) {
-      subj  <- paste(parts[-length(parts)], collapse = "_")
-      grade <- as.integer(last)
+  cuts_rows <- lapply(names(assessment_spec$subjects), function(subj) {
+    grades <- assessment_spec$subjects[[subj]]$grades
+    if (is.null(grades)) {
+      # EOC subject
+      ss <- assessment_spec$scale_scores[[subj]]
+      if (is.null(ss)) return(NULL)
+      data.frame(
+        SUBJECT = subj,
+        GRADE   = NA_integer_,
+        CUTS    = I(list(ss$cuts)),
+        stringsAsFactors = FALSE
+      )
     } else {
-      subj  <- key
-      grade <- NA_integer_
+      # Span-tested subject
+      do.call(rbind, lapply(grades, function(g) {
+        ss <- assessment_spec$scale_scores[[subj]][[as.character(g)]]
+        if (is.null(ss)) return(NULL)
+        data.frame(
+          SUBJECT = subj,
+          GRADE   = as.integer(g),
+          CUTS    = I(list(ss$cuts)),
+          stringsAsFactors = FALSE
+        )
+      }))
     }
-    data.frame(
-      SUBJECT = subj,
-      GRADE   = grade,
-      CUTS    = I(list(ss$cuts)),
-      stringsAsFactors = FALSE
-    )
   })
   cuts_lookup <- do.call(rbind, cuts_rows)
 
@@ -466,7 +472,7 @@ summarize_score_integrity <- function(score_integrity_result) {
 #' Run the score integrity sub-analysis and return the results sub-list
 #'
 #' Orchestrates [compute_score_integrity()], [plot_score_integrity()], and
-#' [summarize_score_integrity()] into the standardised sub-list consumed by
+#' [summarize_score_integrity()] into the standardized sub-list consumed by
 #' [run_anomaly_analysis()].
 #'
 #' @param student_results_long A long-format student results data frame.

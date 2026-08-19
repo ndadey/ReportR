@@ -19,7 +19,7 @@ A named list with:
 }
 \description{
 Orchestrates \code{\link[=compute_score_integrity]{compute_score_integrity()}}, \code{\link[=plot_score_integrity]{plot_score_integrity()}}, and
-\code{\link[=summarize_score_integrity]{summarize_score_integrity()}} into the standardised sub-list consumed by
+\code{\link[=summarize_score_integrity]{summarize_score_integrity()}} into the standardized sub-list consumed by
 \code{\link[=run_anomaly_analysis]{run_anomaly_analysis()}}.
 }
 \examples{

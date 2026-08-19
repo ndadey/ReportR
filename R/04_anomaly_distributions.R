@@ -7,7 +7,7 @@
 #
 # Functions:
 #   compute_distributions()   — distribution shape statistics and flags
-#   plot_distributions()      — visualise flagged distributions
+#   plot_distributions()      — visualize flagged distributions
 #   summarize_distributions() — narrative summary
 #   run_distributions()       — entry point; returns the sub-list
 # ==============================================================================
@@ -80,7 +80,7 @@ compute_distributions <- function(student_results_long,
     dplyr::group_by(
       .data[["YEAR"]], .data[["SUBJECT"]], .data[["GRADE"]]
     ) |>
-    dplyr::summarise(
+    dplyr::summarize(
       n        = dplyr::n(),
       mean     = mean(.data[["SCALE_SCORE"]], na.rm = TRUE),
       sd       = stats::sd(.data[["SCALE_SCORE"]], na.rm = TRUE),
@@ -174,6 +174,37 @@ compute_distributions <- function(student_results_long,
 #' plots <- plot_distributions(tbl, demo_data, assessment_spec)
 #' plots$shape_heatmap
 #' }
+
+# Package-level helper — builds one flagged-cell density plot from pre-computed
+# curve data. Defined outside plot_distributions so its environment never holds
+# student_results_long.
+.build_flagged_density_plot <- function(dens_dat, loss_val, hoss_val,
+                                         title_str, subtitle_str) {
+  p <- ggplot2::ggplot(
+    dens_dat,
+    ggplot2::aes(x = .data[["x"]], y = .data[["y"]])
+  ) +
+    ggplot2::geom_ribbon(ggplot2::aes(ymin = 0, ymax = .data[["y"]]),
+                         fill = "#cfe2f3", alpha = 0.7) +
+    ggplot2::geom_line(color = "#3c78d8") +
+    ggplot2::labs(title = title_str, subtitle = subtitle_str,
+                  x = "Scale Score", y = "Density") +
+    ggplot2::theme_minimal(base_size = 11)
+
+  if (!is.na(loss_val)) {
+    p <- p +
+      ggplot2::geom_vline(xintercept = loss_val, linetype = "dashed",
+                          color = "#cc0000", linewidth = 0.7) +
+      ggplot2::annotate("text", x = loss_val, y = Inf, label = "LOSS",
+                        vjust = 1.5, hjust = -0.1, size = 3, color = "#cc0000") +
+      ggplot2::geom_vline(xintercept = hoss_val, linetype = "dashed",
+                          color = "#cc0000", linewidth = 0.7) +
+      ggplot2::annotate("text", x = hoss_val, y = Inf, label = "HOSS",
+                        vjust = 1.5, hjust = 1.1, size = 3, color = "#cc0000")
+  }
+  p
+}
+
 plot_distributions <- function(distribution_table,
                                 student_results_long,
                                 assessment_spec) {
@@ -299,6 +330,12 @@ plot_distributions <- function(distribution_table,
   if (nrow(flagged) > 0) {
     lh_lookup <- build_loss_hoss_lookup(assessment_spec)
 
+    # Keep only needed columns to avoid large objects in loop scope
+    base_scores <- student_results_long[
+      !is.na(student_results_long[["SCALE_SCORE"]]),
+      c("SUBJECT", "GRADE", "YEAR", "SCALE_SCORE")
+    ]
+
     for (i in seq_len(nrow(flagged))) {
       row   <- flagged[i, ]
       subj  <- row$SUBJECT
@@ -307,30 +344,28 @@ plot_distributions <- function(distribution_table,
       flag  <- row$distribution_flag
       rsn   <- row$flag_reason
 
-      cell_data <- student_results_long |>
-        dplyr::filter(
-          .data[["SUBJECT"]] == subj,
-          .data[["YEAR"]]    == yr,
-          !is.na(.data[["SCALE_SCORE"]])
-        )
+      mask <- base_scores[["SUBJECT"]] == subj & base_scores[["YEAR"]] == yr &
+              (if (is.na(grade)) is.na(base_scores[["GRADE"]])
+               else !is.na(base_scores[["GRADE"]]) & base_scores[["GRADE"]] == grade)
+      scores <- base_scores[["SCALE_SCORE"]][mask]
 
-      if (!is.na(grade)) {
-        cell_data <- cell_data |>
-          dplyr::filter(.data[["GRADE"]] == grade)
-      }
+      if (length(scores) < 2L) next
 
-      if (nrow(cell_data) == 0) next
+      lh_row <- lh_lookup[
+        lh_lookup[["SUBJECT"]] == subj &
+        (if (is.na(grade)) is.na(lh_lookup[["GRADE"]])
+         else !is.na(lh_lookup[["GRADE"]]) & lh_lookup[["GRADE"]] == grade), ]
 
-      lh <- lh_lookup |>
-        dplyr::filter(
-          .data[["SUBJECT"]] == subj,
-          if (is.na(grade)) is.na(.data[["GRADE"]])
-          else (!is.na(.data[["GRADE"]]) & .data[["GRADE"]] == grade)
-        )
+      loss_val <- if (nrow(lh_row) > 0L) lh_row[["LOSS"]][1L] else NA_real_
+      hoss_val <- if (nrow(lh_row) > 0L) lh_row[["HOSS"]][1L] else NA_real_
+
+      dens     <- stats::density(scores, n = 512L)
+      dens_dat <- data.frame(x = dens$x, y = dens$y)
 
       grade_lbl <- if (is.na(grade)) "EOC" else paste0("Grade ", grade)
       plot_key  <- paste0(subj, "_", grade_lbl, "_", yr)
-      subj_lbl  <- dplyr::recode(subj, !!!subj_labels, .default = subj)
+      subj_lbl  <- assessment_spec$subjects[[subj]]$label
+      if (is.null(subj_lbl)) subj_lbl <- subj
 
       p <- ggplot2::ggplot(
         cell_data,

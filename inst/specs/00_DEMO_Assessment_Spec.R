@@ -42,29 +42,31 @@ assessment_spec <- list(
   #    the actual sgpData_LONG score distribution before use in
   #    any substantive analysis.
   #
-  #    Grade-level ranges follow the convention of the SGPdata
-  #    package: each grade's scale is roughly grade * 100 ± 100,
-  #    with Grade 3 anchored around 300-500.
-  #
-  #    Keys: <SUBJECT>_<GRADE> (no EOC subjects in this dataset)
+  #    Structure: scale_scores$SUBJECT$GRADE for span-tested subjects,
+  #               scale_scores$SUBJECT       for EOC subjects.
+  #    Grade keys are character strings matching as.character(GRADE).
   # ================================================================
   scale_scores = list(
 
     # -- ELA --------------------------------------------------------
-    ELA_3 = list(loss = 250, hoss = 600, cuts = c(350, 420, 500)),
-    ELA_4 = list(loss = 300, hoss = 650, cuts = c(390, 460, 540)),
-    ELA_5 = list(loss = 350, hoss = 700, cuts = c(430, 500, 580)),
-    ELA_6 = list(loss = 380, hoss = 730, cuts = c(460, 530, 610)),
-    ELA_7 = list(loss = 400, hoss = 760, cuts = c(490, 560, 640)),
-    ELA_8 = list(loss = 420, hoss = 800, cuts = c(510, 590, 670)),
+    ELA = list(
+      `3` = list(loss = 250, hoss = 600, cuts = c(350, 420, 500)),
+      `4` = list(loss = 300, hoss = 650, cuts = c(390, 460, 540)),
+      `5` = list(loss = 350, hoss = 700, cuts = c(430, 500, 580)),
+      `6` = list(loss = 380, hoss = 730, cuts = c(460, 530, 610)),
+      `7` = list(loss = 400, hoss = 760, cuts = c(490, 560, 640)),
+      `8` = list(loss = 420, hoss = 800, cuts = c(510, 590, 670))
+    ),
 
     # -- MATHEMATICS ------------------------------------------------
-    MATHEMATICS_3 = list(loss = 250, hoss = 600, cuts = c(350, 420, 500)),
-    MATHEMATICS_4 = list(loss = 300, hoss = 650, cuts = c(390, 460, 540)),
-    MATHEMATICS_5 = list(loss = 350, hoss = 700, cuts = c(430, 500, 580)),
-    MATHEMATICS_6 = list(loss = 380, hoss = 730, cuts = c(460, 530, 610)),
-    MATHEMATICS_7 = list(loss = 400, hoss = 760, cuts = c(490, 560, 640)),
-    MATHEMATICS_8 = list(loss = 420, hoss = 800, cuts = c(510, 590, 670))
+    MATHEMATICS = list(
+      `3` = list(loss = 250, hoss = 600, cuts = c(350, 420, 500)),
+      `4` = list(loss = 300, hoss = 650, cuts = c(390, 460, 540)),
+      `5` = list(loss = 350, hoss = 700, cuts = c(430, 500, 580)),
+      `6` = list(loss = 380, hoss = 730, cuts = c(460, 530, 610)),
+      `7` = list(loss = 400, hoss = 760, cuts = c(490, 560, 640)),
+      `8` = list(loss = 420, hoss = 800, cuts = c(510, 590, 670))
+    )
   ),
 
   # ================================================================
