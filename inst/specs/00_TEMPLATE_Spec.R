@@ -40,14 +40,22 @@ assessment_spec <- list(
 
   # ================================================================
   # 4. Scale Score Structure
-  #    Keys: <SUBJECT>_<GRADE> for span-tested, <SUBJECT> for EOC
   #    loss: lowest obtainable scale score
   #    hoss: highest obtainable scale score
   #    cuts: upper bounds of each level except the top, length = n_levels - 1
+  #
+  #    Structure: scale_scores$SUBJECT$GRADE for span-tested subjects,
+  #               scale_scores$SUBJECT       for EOC subjects.
+  #    Grade keys are character strings matching as.character(GRADE).
   # ================================================================
   scale_scores = list(
-    # SUBJECT_3 = list(loss = , hoss = , cuts = c()),
-    # SUBJECT_4 = list(loss = , hoss = , cuts = c()),
+    # Span-tested subject (one entry per grade):
+    # SUBJECT = list(
+    #   `3` = list(loss = , hoss = , cuts = c()),
+    #   `4` = list(loss = , hoss = , cuts = c())
+    # ),
+    #
+    # EOC subject (no grade nesting):
     # EOC_SUBJECT = list(loss = , hoss = , cuts = c())
   ),
 

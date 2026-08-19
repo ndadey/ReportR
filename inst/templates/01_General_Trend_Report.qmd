@@ -1,0 +1,316 @@
+---
+title: "Section 1. General Trend Analysis"
+format:
+  docx:
+    toc: true
+    number-sections: true
+    fig-dpi: 300
+  html:
+    toc: true
+    toc-float: true
+    code-fold: true
+editor: visual
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  pkg_path:     null
+  spec_file:    null
+  results_file: null
+  min_n:        10
+---
+
+```{r setup}
+# pkg_path is the absolute path to the package root, passed by the driver
+# script. This is required because the QMD may render in a temp directory
+# where here::here() cannot locate the DESCRIPTION file.
+pkg_root <- params$pkg_path
+
+# Load package functions.
+# If pkg_root contains a source-level DESCRIPTION + R/ directory (dev mode),
+# use devtools::load_all(). Otherwise the package is installed — use library().
+if (!is.null(pkg_root) &&
+    file.exists(file.path(pkg_root, "DESCRIPTION")) &&
+    file.exists(file.path(pkg_root, "R"))) {
+  devtools::load_all(pkg_root)
+} else {
+  library(ReportR)
+}
+
+# Source the assessment spec — puts assessment_spec in scope.
+spec_path <- if (file.exists(params$spec_file)) {
+  params$spec_file
+} else {
+  file.path(pkg_root, params$spec_file)
+}
+source(spec_path)
+
+# Load pre-computed results from RDS.
+general_trend_results <- readRDS(params$results_file)
+min_n <- general_trend_results$params$min_n
+```
+
+## Introduction
+
+```{r subtitle, results='asis'}
+cat("###", assessment_spec$program$name, "\n")
+```
+
+This section presents general trend findings for `r assessment_spec$program$name`. Results are organized into four areas: (1) scale score trends over time, (2) proficiency trends, (3) score distribution patterns, and (4) achievement level transitions. All analyses exclude cells with fewer than `r min_n` students.
+
+------------------------------------------------------------------------
+
+## Scale Score Trends
+
+### Mean Scale Scores Over Time
+
+```{r score-narrative, results='asis'}
+cat(general_trend_results$score_trends$text$narrative)
+```
+
+```{r tbl-score-trends, tab.cap="Mean Scale Scores and Standard Deviations by Year, Subject, and Grade"}
+tbl <- general_trend_results$score_trends$table
+
+mean_sd_cols <- grep("_(Mean|SD)$", names(tbl), value = TRUE)
+
+flextable::flextable(tbl) |>
+  flextable::bold(part = "header") |>
+  flextable::fontsize(size = 9, part = "all") |>
+  flextable::colformat_double(j = mean_sd_cols, digits = 2) |>
+  flextable::set_table_properties(layout = "autofit", width = 1)
+```
+
+```{r tbl-score-changes, tab.cap="Year-to-Year Changes in Mean Scale Scores, Standard Deviations, and N by Subject and Grade"}
+yrs   <- sort(as.integer(sub("_Mean$", "", grep("_Mean$", names(tbl), value = TRUE))))
+y1s   <- yrs[-length(yrs)]
+y2s   <- yrs[-1]
+pairs <- paste0(y1s, "→", y2s)
+
+diff_tbl <- tbl[, c("SUBJECT", "GRADE")]
+for (i in seq_along(pairs))
+  diff_tbl[[paste0(pairs[i], "_ΔMean")]] <-
+    round(tbl[[paste0(y2s[i], "_Mean")]] - tbl[[paste0(y1s[i], "_Mean")]], 2)
+for (i in seq_along(pairs))
+  diff_tbl[[paste0(pairs[i], "_ΔSD")]] <-
+    round(tbl[[paste0(y2s[i], "_SD")]] - tbl[[paste0(y1s[i], "_SD")]], 2)
+for (i in seq_along(pairs))
+  diff_tbl[[paste0(pairs[i], "_ΔN")]] <-
+    tbl[[paste0(y2s[i], "_N")]] - tbl[[paste0(y1s[i], "_N")]]
+
+delta_mean_sd_cols <- grep("_Δ(Mean|SD)$", names(diff_tbl), value = TRUE)
+
+flextable::flextable(diff_tbl) |>
+  flextable::bold(part = "header") |>
+  flextable::fontsize(size = 9, part = "all") |>
+  flextable::colformat_double(j = delta_mean_sd_cols, digits = 2) |>
+  flextable::set_table_properties(layout = "autofit", width = 1)
+```
+
+```{r mean-trend-plot, fig.width=8, fig.height=5, results='asis'}
+for (p in general_trend_results$score_trends$plot$mean_trend) {
+  print(p)
+  cat("\n\n")
+}
+```
+
+```{r mean-sd-plot, fig.width=8, fig.height=5, results='asis'}
+for (p in general_trend_results$score_trends$plot$mean_sd) {
+  print(p)
+  cat("\n\n")
+}
+```
+
+------------------------------------------------------------------------
+
+## Proficiency Trends
+
+### Percent Proficient Over Time
+
+```{r prof-narrative, results='asis'}
+cat(general_trend_results$proficiency$text$narrative)
+```
+
+```{r tbl-proficiency, tab.cap="Percent Proficient and Student Counts by Year, Subject, and Grade"}
+prof_tbl <- general_trend_results$proficiency$table
+
+yr_order  <- sort(unique(prof_tbl$YEAR))
+stat_cols <- as.vector(outer(yr_order, c("Pct", "N"), paste, sep = "_"))
+
+display_tbl <- prof_tbl |>
+  dplyr::mutate(pct_proficient = round(pct_proficient, 1)) |>
+  dplyr::select(YEAR, SUBJECT, GRADE, Pct = pct_proficient, N = n) |>
+  tidyr::pivot_longer(cols = c("Pct", "N"), names_to = "stat", values_to = "value") |>
+  dplyr::mutate(col_name = paste(YEAR, stat, sep = "_")) |>
+  dplyr::select(-YEAR, -stat) |>
+  tidyr::pivot_wider(names_from = col_name, values_from = value) |>
+  dplyr::select(SUBJECT, GRADE,
+                dplyr::any_of(stat_cols)) |>
+  dplyr::arrange(SUBJECT, GRADE)
+
+flextable::flextable(display_tbl) |>
+  flextable::bold(part = "header") |>
+  flextable::fontsize(size = 9, part = "all") |>
+  flextable::set_table_properties(layout = "autofit", width = 1)
+```
+
+```{r tbl-proficiency-changes, tab.cap="Year-to-Year Changes in Percent Proficient and Student Counts by Subject and Grade"}
+py1s   <- yr_order[-length(yr_order)]
+py2s   <- yr_order[-1]
+ppairs <- paste0(py1s, "→", py2s)
+
+prof_diff_tbl <- display_tbl[, c("SUBJECT", "GRADE")]
+for (i in seq_along(ppairs))
+  prof_diff_tbl[[paste0(ppairs[i], "_ΔPct")]] <-
+    round(display_tbl[[paste0(py2s[i], "_Pct")]] - display_tbl[[paste0(py1s[i], "_Pct")]], 1)
+for (i in seq_along(ppairs))
+  prof_diff_tbl[[paste0(ppairs[i], "_ΔN")]] <-
+    display_tbl[[paste0(py2s[i], "_N")]] - display_tbl[[paste0(py1s[i], "_N")]]
+
+delta_pct_cols <- grep("_ΔPct$", names(prof_diff_tbl), value = TRUE)
+
+flextable::flextable(prof_diff_tbl) |>
+  flextable::bold(part = "header") |>
+  flextable::fontsize(size = 9, part = "all") |>
+  flextable::colformat_double(j = delta_pct_cols, digits = 1) |>
+  flextable::set_table_properties(layout = "autofit", width = 1)
+```
+
+```{r prof-trend-plot, fig.width=9, fig.height=4}
+general_trend_results$proficiency$plot$trend
+```
+
+### Proficiency Heatmap
+
+```{r prof-heatmap-plot, fig.width=9, fig.height=4}
+general_trend_results$proficiency$plot$heatmap
+```
+
+------------------------------------------------------------------------
+
+## Scale Score Distributions
+
+### Distribution Shifts Over Time
+
+```{r density-narrative, results='asis'}
+cat(general_trend_results$distributions$text$narrative)
+```
+
+```{r density-plots, fig.width=10, fig.height=9, results='asis'}
+density_plots <- general_trend_results$distributions$plot$density
+
+for (subj in names(density_plots)) {
+  p <- density_plots[[subj]]
+  if (!is.null(p)) {
+    print(p)
+    cat("\n\n")
+  }
+}
+```
+
+------------------------------------------------------------------------
+
+## Achievement Level Transitions
+
+### Transition Summary
+
+```{r transition-narrative, results='asis'}
+cat(general_trend_results$achievement_transitions$text$narrative)
+```
+
+### Transition Rates
+
+```{r transition-rates-plot, fig.width=9, fig.height=5}
+general_trend_results$achievement_transitions$matrices$plot$rates
+```
+
+### Flagged Transitions
+
+```{r transition-flags-narrative, results='asis'}
+cat(general_trend_results$achievement_transitions$flags$narrative)
+```
+
+```{r transition-flags-table}
+flags_tbl <- general_trend_results$achievement_transitions$flags$table
+if (!is.null(flags_tbl) && nrow(flags_tbl) > 0) {
+  flextable::flextable(
+    flags_tbl |>
+      dplyr::select(subj_label, grade_lbl, YEAR_1, YEAR_2,
+                    pct_up, pct_stable, pct_down, flag_type) |>
+      dplyr::mutate(
+        pct_up     = round(pct_up     * 100, 1),
+        pct_stable = round(pct_stable * 100, 1),
+        pct_down   = round(pct_down   * 100, 1)
+      ) |>
+      dplyr::rename(`Subject` = subj_label, `Grade` = grade_lbl,
+                    `Year 1` = YEAR_1, `Year 2` = YEAR_2,
+                    `% Up` = pct_up, `% Stable` = pct_stable,
+                    `% Down` = pct_down, `Flag` = flag_type)
+  ) |>
+    flextable::bold(part = "header") |>
+    flextable::fontsize(size = 9, part = "all") |>
+    flextable::bg(bg = "#fce8b2", part = "body") |>
+    flextable::set_table_properties(layout = "autofit", width = 1)
+}
+```
+
+```{r transition-cell-flags-table}
+cell_flags <- general_trend_results$achievement_transitions$flags$table_cells
+if (!is.null(cell_flags) && nrow(cell_flags) > 0) {
+  flextable::flextable(
+    cell_flags |>
+      dplyr::select(subj_label, grade_lbl, YEAR_1, YEAR_2,
+                    from_level, to_level, prop, mean_prop, flag_dir) |>
+      dplyr::mutate(
+        prop      = round(prop      * 100, 1),
+        mean_prop = round(mean_prop * 100, 1)
+      ) |>
+      dplyr::rename(`Subject` = subj_label, `Grade` = grade_lbl,
+                    `Year 1` = YEAR_1, `Year 2` = YEAR_2,
+                    `From Level` = from_level, `To Level` = to_level,
+                    `% Observed` = prop, `% Typical` = mean_prop,
+                    `Flag` = flag_dir)
+  ) |>
+    flextable::bold(part = "header") |>
+    flextable::fontsize(size = 9, part = "all") |>
+    flextable::bg(bg = "#fce8b2", part = "body") |>
+    flextable::set_table_properties(layout = "autofit", width = 1)
+}
+```
+
+### Average Transition Heatmaps
+
+```{r transition-heatmaps, fig.width=9, fig.height=6, results='asis'}
+for (p in general_trend_results$achievement_transitions$matrices$plot$heatmap) {
+  print(p)
+  cat("\n\n")
+}
+```
+
+### Transitions vs. Scale Score and Proficiency Trends
+
+```{r transition-scatter-mean, fig.width=9, fig.height=4}
+general_trend_results$achievement_transitions$comparisons$plot$scatter_mean
+```
+
+```{r transition-scatter-prof, fig.width=9, fig.height=4}
+general_trend_results$achievement_transitions$comparisons$plot$scatter_prof
+```
+
+```{r transition-scatter-prof-vs-mean, fig.width=9, fig.height=4}
+general_trend_results$achievement_transitions$comparisons$plot$scatter_prof_vs_mean
+```
+
+```{r transition-divergences}
+divs <- general_trend_results$achievement_transitions$comparisons$divergences
+if (!is.null(divs) && nrow(divs) > 0) {
+  flextable::flextable(
+    divs |> dplyr::select(subj_label, grade_lbl, YEAR_1, YEAR_2,
+                           divergence_flag, annotation)
+  ) |>
+    flextable::bold(part = "header") |>
+    flextable::fontsize(size = 9, part = "all") |>
+    flextable::bg(bg = "#9fc5e8", part = "body") |>
+    flextable::set_table_properties(layout = "autofit", width = 1)
+}
+```

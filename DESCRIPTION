@@ -15,11 +15,15 @@ Imports:
     tidyr (>= 1.3.0),
     ggplot2 (>= 3.4.0),
     rlang,
-    stats
+    stats,
+    flextable
 Suggests:
     testthat (>= 3.0.0),
     devtools,
     here,
-    flextable,
     openxlsx,
-    SGPdata
+    SGPdata,
+    ggalluvial,
+    patchwork,
+    lme4,
+    ggrepel

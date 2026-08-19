@@ -16,7 +16,7 @@ different states and years.
 The package is built around four **lines of analysis**:
 
 1. **General Trend Analysis** — systemwide performance over time (means, distributions,
-   proficiency, enrollment shifts, cohort patterns)
+   proficiency, achievement transitions)
 2. **Student Group Analysis** — disaggregated results by demographic groups and
    intersectional subgroups
 3. **Aggregate Analysis** — school- and district-level performance, variability, and outliers
@@ -54,19 +54,41 @@ devtools::install_github("ndadey/ReportR")
 | `R/04_anomaly_outliers.R` | ✅ Complete | Year-to-year outlier detection |
 | `R/04_anomaly_correlations.R` | ✅ Complete | Cohort-style Spearman correlation analysis |
 | `R/04_anomaly_distributions.R` | ✅ Complete | Distribution shape diagnostics (bimodal, skewed, flat) |
-| `R/01_trend_overall.R` | 🔶 Partial | `compute_score_summary()`, `mean_sd_table_wide()` ported; proficiency/density/enrollment functions not yet ported |
+| `R/run_general_trend_analysis.R` | ✅ Complete | Orchestrator for all Line 1 sub-analyses |
+| `R/01_trend_overall.R` | ✅ Complete | Score summary, trend plots, narrative |
+| `R/01_trend_proficiency.R` | ✅ Complete | Proficiency trends + narrative |
+| `R/01_trend_distributions.R` | ✅ Complete | Score density plots per subject/grade |
+| `R/01_trend_transitions.R` | ✅ Complete | Achievement level transition matrices + flags |
 | `inst/templates/04_Anomaly_Report.qmd` | ✅ Complete | Full report template for Line 4 |
-| `inst/specs/00_MS_Assessment_Spec.R` | ✅ Complete | Mississippi MAAP (5 levels) — reference implementation |
-| `inst/specs/00_DEMO_Assessment_Spec.R` | ✅ Complete | SGPdata demo (4 levels) — primary runnable example |
+| `inst/templates/01_General_Trend_Report.qmd` | ✅ Complete | Full report template for Line 1 |
+| `inst/specs/00_MS_Assessment_Spec.R` | ✅ Complete | Mississippi MAAP (5 levels) — nested scale_scores structure |
+| `inst/specs/00_DEMO_Assessment_Spec.R` | ✅ Complete | SGPdata demo (4 levels) — nested scale_scores structure |
 | `inst/specs/00_TEMPLATE_Spec.R` | ✅ Complete | Blank template for new states |
-| `inst/workshop/workshop_anomaly_analysis.R` | ✅ Complete | Step-by-step workshop script for Line 4 |
+| `inst/workshop/workshop_anomaly_analysis.R` | ✅ Complete | Step-by-step workshop script for Line 4 (demo data) |
+| `inst/workshop/workshop_general_trend_analysis.R` | ✅ Complete | Step-by-step workshop script for Line 1 (demo data) |
+| `inst/workshop/MS_workshop_general_trend_analysis.R` | ✅ Complete | MS MAAP driver: runs both Line 1 and Line 4, renders both reports |
+| `R/01_general_cohort.R` | ✅ Complete | All Line 1.3 cohort compute/plot/summarize/run functions |
+| `R/run_general_cohort.R` | ✅ Complete | Line 1.3 orchestrator — saves RDS, renders report |
+| `inst/templates/01_General_Cohort_Report.qmd` | ✅ Complete | Full report template for Line 1.3 |
+| `inst/workshop/MS_workshop_general_cohort_analysis.R` | ✅ Complete | MS MAAP driver for Line 1.3 |
+| `R/utils_enrollment.R` | ✅ Complete | `suppress_small_n_enroll()` helper + Step 1 findings comment |
+| `R/01_trend_enrollment.R` | ✅ Complete | All Line 1.2 compute/plot/summarize/run functions |
+| `R/run_general_enrollment_analysis.R` | ✅ Complete | Line 1.2 orchestrator — returns `general_enrollment_results` |
+| `inst/templates/01_Enrollment_Trends_Report.qmd` | ✅ Complete | Full report template for Line 1.2 |
+| `inst/templates/01_Enrollment_Brief.qmd` | ✅ Complete | One-page brief template for Line 1.2 |
+| `inst/workshop/MS_workshop_enrollment_analysis.R` | ✅ Complete | MS MAAP driver for Line 1.2 |
+| `R/aggregate_helpers.R` | ✅ Complete | All five Line 5 compute_* functions |
+| `R/run_aggregate_analysis.R` | ✅ Complete | Line 5 orchestrator — returns `aggregate_results` |
+| `inst/templates/05_Aggregate_Analysis_Report.qmd` | ✅ Complete | Full report template for Line 5 (student_results_long sections) |
+| `inst/workshop/MS_workshop_aggregate_analysis.R` | ✅ Complete | MS MAAP driver for Line 5 |
 | `README.md` | ✅ Complete | Install instructions, quick start, package overview |
 
 ### What is not yet built
 
-- Lines 1 (remaining functions), 2, and 3 analysis functions
-- `run_trend_analysis.R`, `run_group_analysis.R`, `run_aggregate_analysis.R` orchestrators
-- `inst/templates/` for Lines 1, 2, 3
+- Line 2 (Student Group Analysis) functions and report
+- Line 3 (school/district) functions dependent on `school_results_long` (accountability grades,
+  HQIM flags, intervention analysis) — placeholders exist in `run_aggregate_analysis.R`
+- `inst/templates/` for Line 2
 
 ---
 
@@ -94,18 +116,38 @@ Each `run_*_analysis()` orchestrator:
 - Narrative text is pulled from `$text$narrative` — never written inline in the `.qmd`
 
 ### Driver scripts
-- `MS/run_anomaly_report.R` — MS data driver (real state data)
-- `dev/run_anomaly_report_demo.R` — SGPdata demo driver
-- Both scripts: load data → run analysis → saveRDS → copy QMD to tempdir → render → copy .docx to output
+- `inst/workshop/MS_workshop_general_trend_analysis.R` — MS MAAP driver for Line 1 + Line 4
+- `inst/workshop/MS_workshop_general_cohort_analysis.R` — MS MAAP driver for Line 1.3
+- `MS/run_anomaly_report.R` — MS-only anomaly driver (uses `here::here()`)
+- Demo workshop scripts: `inst/workshop/workshop_anomaly_analysis.R` and `workshop_general_trend_analysis.R`
 
-The tempdir render pattern is required because Dropbox locks intermediate files that
-Quarto tries to clean up. The QMD is copied to `tempdir()` before rendering.
+**Critical: Dropbox pattern for all file operations.** Two separate issues require
+using `tempdir()`:
+
+1. **`saveRDS()`** — Dropbox locks `.rds` files during sync. Always save to `tempdir()`
+   first, then `file.copy()` to the output directory.
+2. **`quarto_render()`** — Dropbox locks the intermediate `_files/` folder Quarto creates.
+   Always copy the QMD to `tempdir()` before rendering, and point `results_file` at the
+   tempdir copy of the RDS.
+
+```r
+RENDER_DIR <- file.path(tempdir(), "ReportR_render")
+dir.create(RENDER_DIR, showWarnings = FALSE)
+
+# Save RDS to tempdir first
+rds_tmp <- file.path(RENDER_DIR, "results.rds")
+saveRDS(results, rds_tmp)
+file.copy(rds_tmp, file.path(OUTPUT_DIR, "results.rds"), overwrite = TRUE)
+
+# Copy QMD and render from tempdir
+qmd_local <- file.path(RENDER_DIR, "Report.qmd")
+file.copy(qmd_src, qmd_local, overwrite = TRUE)
+quarto::quarto_render(input = qmd_local, ..., execute_params = list(results_file = rds_tmp))
+```
 
 ---
 
 ## 4. QMD Params Pattern
-
-The QMD no longer uses a `setup_file` param. Instead:
 
 ```yaml
 params:
@@ -119,12 +161,12 @@ params:
 to find `DESCRIPTION`. Once the package is installed by end users, the setup chunk
 becomes `library(ReportR)` and `pkg_path` is no longer needed.
 
-**`spec_file`** is relative to `pkg_path` (e.g. `"inst/specs/00_DEMO_Assessment_Spec.R"`).
+**`spec_file`** is relative to `pkg_path` (e.g. `"inst/specs/00_MS_Assessment_Spec.R"`).
 With an installed package, users pass the output of `system.file(...)` directly.
 
-**`results_file`** is an absolute path. Driver scripts pass the already-resolved variable
-(e.g. `results_file`) not a relative string, to avoid path resolution issues inside
-the temp render directory.
+**`results_file`** is an absolute path. Driver scripts pass the already-resolved tempdir
+path (not a relative string) to avoid path resolution issues inside the temp render
+directory.
 
 ---
 
@@ -163,20 +205,17 @@ assessment_spec <- list(
     policy_benchmark = "Proficient"
   ),
 
-  # 4. Scale scores
-  #    Keys: <SUBJECT>_<GRADE> for span-tested, <SUBJECT> for EOC
-  #    loss: lowest obtainable scale score
-  #    hoss: highest obtainable scale score
-  #    cuts: upper bounds of each level except the top (whose ceiling
-  #          is hoss). Length always = length(achievement_levels$labels) - 1.
-  #          Ordered low to high.
+  # 4. Scale scores — NESTED structure (changed from flat in prior versions)
+  #    Span-tested: scale_scores$SUBJECT$GRADE (character grade key)
+  #    EOC:         scale_scores$SUBJECT        (no grade nesting)
   scale_scores = list(
-    ELA_3  = list(loss = 301,  hoss = 399,  cuts = c(334, 349, 364, 386)),
-    ELA_4  = list(loss = 401,  hoss = 499,  cuts = c(428, 449, 464, 487)),
-    # ... remaining span-tested entries follow same pattern
+    ELA = list(
+      `3` = list(loss = 301, hoss = 399, cuts = c(334, 349, 364, 386)),
+      `4` = list(loss = 401, hoss = 499, cuts = c(428, 449, 464, 487))
+      # ... remaining grades follow same pattern
+    ),
     ENG_II = list(loss = 1001, hoss = 1099, cuts = c(1036, 1049, 1064, 1080)),
     ALG_I  = list(loss = 1001, hoss = 1099, cuts = c(1038, 1049, 1064, 1087))
-    # EOC subjects use subject name alone as key (no grade suffix)
   ),
 
   # 5. Years & cohorts
@@ -200,6 +239,9 @@ assessment_spec <- list(
 
 - **Scale score lookup**: `get_score_spec(assessment_spec, subject, grade = NULL)` — use
   this helper; do not build the key manually in analysis functions
+- **Scale score structure is NESTED** — `scale_scores$ELA$`3`` for span-tested,
+  `scale_scores$ENG_II` for EOC. The OLD flat structure (`ELA_3 = list(...)`) is no
+  longer used. Any code that builds keys like `paste(subj, grade, sep="_")` is wrong.
 - **Level derivation**: level index = `sum(score > cuts) + 1`; label =
   `achievement_levels$labels[index]`
 - **Number of levels**: always `length(achievement_levels$labels)` — never hardcode 4 or 5.
@@ -222,7 +264,7 @@ After calling `standardize_student_results()`, the expected column names are:
 
 | Column             | Type      | Notes                                          |
 |--------------------|-----------|------------------------------------------------|
-| `STUDENT_ID`       | character | Required for correlation analysis              |
+| `STUDENT_ID`       | character | Required for correlation and transition analysis |
 | `YEAR`             | integer   | Administration year; `YYYY_YYYY` format auto-converted |
 | `GRADE`            | integer   | Tested grade (NA for EOC subjects)             |
 | `SUBJECT`          | character | Matches keys in `assessment_spec$subjects`     |
@@ -248,15 +290,15 @@ data |> filter(VALID_CASE == "VALID_CASE") |> standardize_student_results() |> f
 
 ---
 
-## 7. Line 4: Score Quality Analysis — Implemented Sub-analyses
+## 7. Line 4: Score Quality Analysis
 
 Line 4 is the most complete module and is the canonical template for all other lines.
 The orchestrator is `run_anomaly_analysis()` in `R/run_anomaly_analysis.R`.
 
-**Important orchestrator behaviour:** `run_anomaly_analysis()` runs all five sub-analyses
+**Important orchestrator behavior:** `run_anomaly_analysis()` runs all five sub-analyses
 in order, then regenerates `anomaly_results$loss_hoss$plot_distributions` with the
-distribution stats from `anomaly_results$distributions$table` included. This means the
-unified score distribution plots contain both HOSS/LOSS and shape statistics.
+distribution stats from `anomaly_results$distributions$table` included. `run_loss_hoss()`
+itself returns `plot_distributions = NULL` — the orchestrator fills it in.
 
 ### 4.1 `anomaly_results$loss_hoss` — HOSS/LOSS Pileups (`R/04_anomaly_loss_hoss.R`)
 
@@ -265,135 +307,349 @@ unified score distribution plots contain both HOSS/LOSS and shape statistics.
 `plot_loss_hoss_distributions()`, `run_loss_hoss()`
 
 **`run_loss_hoss()` returns:**
-- `$table` — pct near HOSS/LOSS by YEAR × SUBJECT × GRADE, with `pct_near_hoss_change`
-  and `pct_near_loss_change` delta columns; severity flags (None/Mild/Moderate/Severe)
-- `$plot_hoss_cleveland`, `$plot_loss_cleveland` — Cleveland dot plots: grade on y-axis,
-  year as colour, horizontal range line showing min–max across years, faceted by subject
-  as columns. Returns an informative blank plot if no data.
-- `$plot_hoss_heat`, `$plot_loss_heat` — heatmaps (computed but not shown in current QMD)
-- `$plot_hoss_line`, `$plot_loss_line` — trend lines (computed but not shown in current QMD)
-- `$plot_distributions` — **flat** named list of ggplot objects, one per subject/grade
-  (e.g. `"ELA_Grade3"`). Each plot shows all years overlaid, x-axis restricted to
-  LOSS–HOSS ± margin, both HOSS (red dashed) and LOSS (blue dashed) boundaries, cut
-  score lines, and a per-year annotation (% near HOSS, % near LOSS, skewness, BC).
-  Regenerated by the orchestrator after distributions are computed.
-- `$text` — `$narrative` (markdown bullet list), `$by_subject`, `$table`
-
-**Key parameters:** `point_adjust = 5`, `mild_thresh = 5`, `moderate_thresh = 10`,
-`severe_thresh = 15`
+- `$table` — pct near HOSS/LOSS by YEAR × SUBJECT × GRADE, with delta columns and severity flags
+- `$plot_hoss_cleveland`, `$plot_loss_cleveland` — Cleveland dot plots
+- `$plot_hoss_heat`, `$plot_loss_heat` — heatmaps
+- `$plot_hoss_line`, `$plot_loss_line` — trend lines
+- `$plot_distributions` — `NULL` from `run_loss_hoss()`; regenerated by orchestrator
+- `$text` — `$narrative`, `$by_subject`, `$table`
 
 **`plot_loss_hoss_distributions()` signature:**
 ```r
 plot_loss_hoss_distributions(student_results_long, assessment_spec, loss_hoss_table,
-                              distribution_table = NULL, point_adjust = 5, x_margin = 10)
+                              distribution_table = NULL, point_adjust = 5,
+                              x_margin = 10, max_n_density = 5000L)
 ```
-`distribution_table` is the output of `compute_distributions()` — when supplied, skewness
-and bimodality coefficient are added to the per-year annotation.
+Uses a package-level helper `.build_lh_density_plot()` and pre-computes kernel density
+statistics (512 points per year) to avoid storing raw student data in ggplot objects.
 
-### 4.2 `anomaly_results$score_integrity` — Score Integrity (`R/04_anomaly_score_integrity.R`)
+### 4.2–4.5: Score Integrity, Outliers, Correlations, Distributions
 
-**Functions:** `compute_score_integrity()`, `plot_score_integrity()`,
-`summarize_score_integrity()`, `run_score_integrity()`
-
-**`run_score_integrity()` returns:**
-- `$table` — summary by YEAR × SUBJECT × GRADE: `n_invalid` (outside LOSS–HOSS),
-  `pct_invalid`, `n_mismatch` (level doesn't match cuts), `pct_mismatch`
-- `$invalid_records` — individual student records with outside-of-range scores
-- `$mismatch_records` — individual student records with level mismatches
-- `$plot` — `$invalid` (bar chart), `$mismatch` (heatmap), or NULL if nothing flagged
-- `$text` — `$narrative`, `$table`
-
-### 4.3 `anomaly_results$outliers` — Year-to-Year Outliers (`R/04_anomaly_outliers.R`)
-
-**Functions:** `compute_outliers()`, `plot_outliers()`, `summarize_outliers()`,
-`run_outliers()`
-
-**`run_outliers()` returns:**
-- `$table` — one row per YEAR × SUBJECT × GRADE with `mean_score`, `pct_proficient`,
-  `pct_<binary_demo>` columns, corresponding `delta_*` columns, plus `outlier_flag`
-  (None/Mild/Severe), `outlier_metric`, `outlier_direction`
-- `$plot` — `$score` and `$proficiency`: year-pair on x, delta on y, lines per grade,
-  faceted by subject, flagged points highlighted
-- `$text` — `$narrative`, `$by_subject` (flagged counts by SUBJECT × severity), `$table`
-
-**Flagging:** ±2 SD = Mild, ±3 SD = Severe (standardised across all SUBJECT × GRADE cells)
-
-### 4.4 `anomaly_results$correlations` — Year-to-Year Correlations (`R/04_anomaly_correlations.R`)
-
-**Functions:** `compute_correlations()`, `.make_corr_wide()` (internal),
-`plot_correlations()`, `summarize_correlations()`, `run_correlations()`
-
-**Correlation approach:** Cohort-style — matches student Grade G in year T to their
-Grade G+1 score in year T+1. Each row represents one SUBJECT × grade-pair × year-pair.
-
-**`run_correlations()` returns:**
-- `$table` — one row per SUBJECT × grade-pair × year-pair: `YEAR_1`, `YEAR_2`,
-  `GRADE_1`, `GRADE_2`, `n`, `correlation` (Spearman, NA if `n < min_n`),
-  `low_flag` (< 0.5), `drop_flag` (> 0.15 drop from prior year-pair)
-- `$plot` — `$line` (grade-pair lines over year-pairs, faceted by subject) and
-  `$heatmap` (diverging fill anchored at 0.7). Subject labels use `left_join` against
-  a lookup data frame — not `dplyr::recode(!!!)`
-- `$text` — `$narrative`, `$wide_table` (Subject + Grade Pair rows, interleaved
-  Correlation/N columns per year-pair), `$by_subject`, `$table`
-
-**Requires `STUDENT_ID`** — returns empty frame with message if absent.
-
-### 4.5 `anomaly_results$distributions` — Distribution Shape (`R/04_anomaly_distributions.R`)
-
-**Functions:** `compute_distributions()`, `plot_distributions()`,
-`summarize_distributions()`, `run_distributions()`
-
-**`run_distributions()` returns:**
-- `$table` — one row per YEAR × SUBJECT × GRADE: `mean`, `sd`, `skewness`, `kurtosis`,
-  `p05`–`p95` percentiles, `bimodality_coefficient`, `distribution_flag`
-  (None/Bimodal/Skewed/Flat), `flag_reason`
-- `$plot` — `$flag_summary` (bar, NULL if no flags), `$shape_heatmap`
-  (bimodality coefficient heatmap), `$density_flagged` (named list of density plots
-  for flagged cells only)
-- `$text` — `$narrative`, `$by_subject`, `$table`
-
-**Flagging thresholds:** Bimodal = BC > 0.555, Skewed = |skewness| > 1.0,
-Flat = SD < 0.25 × (HOSS − LOSS). Priority: Bimodal > Skewed > Flat.
-
-**Known fix:** `mapply(.bimodality_coeff, ...)` returns a list when any element is
-`NA_real_`. Always wrap with `as.numeric(mapply(...))`. Small-n suppression uses
-base-R row indexing (`tbl[small, cols] <- NA_real_`), not `dplyr::across()` +
-`dplyr::if_else()`, because the latter cannot assign `NA_real_` into a list column.
+See the sub-analysis files for full details. Key patterns:
+- `$score_integrity$invalid_records` and `$mismatch_records` store individual student records
+- Correlations are cohort-style (Grade G → Grade G+1); requires `STUDENT_ID`
+- Distribution flags: Bimodal (BC > 0.555), Skewed (|skewness| > 1.0), Flat (SD < 0.25 × range)
+- `$distributions$plot$density_flagged` uses `.build_flagged_density_plot()` helper
+  (pre-computed density, no raw data in ggplot)
 
 ---
 
-## 8. Report Structure: `inst/templates/04_Anomaly_Report.qmd`
+## 8. Line 1: General Trend Analysis
 
-The QMD is titled **"Section 4. Score Quality Analysis"**. Section numbering uses
-Quarto's `number-sections: true`. The major sections are:
+The orchestrator is `run_general_trend_analysis()` in `R/run_general_trend_analysis.R`.
 
-1. **Introduction**
-2. **Score Distribution Patterns** *(combines HOSS/LOSS and distribution diagnostics)*
-   - 2.1 Potential Ceiling and Floor Effects — narrative, summary table, Cleveland plots
-   - 2.2 Score Distribution Shape — narrative only (no table)
-   - 2.3 Score Distribution Plots — unified density plots from `plot_distributions`
-3. **Score Integrity**
-4. **Year-to-Year Outliers** — narrative, delta summary table, flagged cells table, plots
-5. **Year-to-Year Correlations** — narrative, wide summary table, flagged grade pairs,
-   line plot, heatmap
-6. **Distribution Diagnostics** *(shape narrative only — plots in §2)*
+```r
+run_general_trend_analysis(
+  student_results_long,
+  assessment_spec,
+  report_years         = NULL,
+  min_n                = 10,
+  score_flat_threshold = 1.0,   # scale score points; changes smaller than this = "relatively flat"
+  prof_flat_threshold  = 1.0,   # percentage points
+  flag_sd              = 1.5    # SD threshold for transition flagging
+)
+```
 
-**Key QMD conventions:**
-- Setup chunk uses `pkg_path` param for `devtools::load_all()` and `spec_file` for
-  sourcing the spec. `results_file` is an absolute path to the pre-computed RDS.
-- Subsequent chunks only read from `anomaly_results`
-- `flextable` for all tables; `merge_v()` used for Subject/Grade columns where appropriate
-- `fig-dpi: 300` in docx format for print-quality output
+Returns `general_trend_results` with sub-lists:
+
+### `$score_trends` (`R/01_trend_overall.R`)
+- `$table` — wide table: SUBJECT × GRADE rows, `<YEAR>_Mean`, `<YEAR>_SD`, `<YEAR>_N`
+  columns grouped by stat (all Means, then all SDs, then all Ns)
+- `$plot$mean_trend`, `$plot$mean_sd`, `$plot$median_iqr`, `$plot$grade_profile` —
+  each is a **named list** keyed by SUBJECT (one ggplot per subject, faceted by grade).
+  Y-axis per grade panel anchored to that grade's LOSS/HOSS via `geom_blank` + `scales="free_y"`.
+- `$text$narrative`, `$text$by_subject`, `$text$table`
+
+### `$proficiency` (`R/01_trend_proficiency.R`)
+- `$table` — long: YEAR × SUBJECT × GRADE, `n`, `n_proficient`, `pct_proficient`
+- `$plot$trend`, `$plot$heatmap`
+- `$text$narrative`, `$text$by_subject`, `$text$table`
+
+### `$distributions` (`R/01_trend_distributions.R`)
+- `$plot$density` — named list keyed by SUBJECT. Each plot is a `patchwork` arrangement
+  of per-grade ggplots (2 columns), x-axis set to each grade's LOSS/HOSS via
+  `coord_cartesian`. Requires `patchwork` package (in Suggests). Fallback to faceted
+  plot if not installed.
+
+### `$achievement_transitions` (`R/01_trend_transitions.R`)
+- `$matrices$long_table`, `$matrices$summary_table`, `$matrices$avg_matrices`
+- `$matrices$plot$heatmap` — named list by SUBJECT
+- `$matrices$plot$alluvial` — named list by SUBJECT_Grade (requires `ggalluvial`)
+- `$matrices$plot$rates` — single dot chart of transition rates
+- `$flags$table`, `$flags$narrative` — normative z-score flags (threshold: `flag_sd`)
+- `$comparisons$correlations`, `$comparisons$divergences` — link to score/proficiency trends
+
+**Transition matching is cohort-style**: Grade G in year T → Grade G+1 in year T+1 (same
+as correlations). EOC subjects matched on STUDENT_ID + SUBJECT only.
 
 ---
 
-## 9. File and Package Structure
+## 8b. Line 1.2: Enrollment Trends
+
+The orchestrator is `run_general_enrollment_analysis()` in
+`R/run_general_enrollment_analysis.R`. It calls `run_enrollment_analysis()` (in
+`R/01_trend_enrollment.R`) which runs all sub-analyses and returns
+`general_enrollment_results`.
+
+```r
+run_general_enrollment_analysis(
+  student_results_long,
+  assessment_spec,
+  report_years  = NULL,
+  subgroup_vars = NULL,   # NULL = all from assessment_spec$demographics
+  min_n         = 10
+)
+```
+
+**Column name resolution:** All enrollment functions accept both raw SGP names
+(`SCHOOL_NUMBER`, `DISTRICT_NUMBER`) and standardized names (`SCHOOL_ID`, `DISTRICT_ID`).
+The pattern `intersect(c("SCHOOL_NUMBER", "SCHOOL_ID"), names(data))[1]` is used throughout.
+Raw names take priority so functions work without `standardize_student_results()`.
+
+### Return structure (`general_enrollment_results`)
+
+```
+$counts$overall              — total unique student-year records
+$counts$by_year              — N and year-over-year change by year
+$counts$by_year_grade        — by year × grade
+$counts$by_year_subject      — by year × subject
+$counts$by_subgroup          — by year × all subgroup vars
+$counts$by_school            — by year × SCHOOL_NUMBER (if available)
+$counts$by_district          — by year × DISTRICT_NUMBER (if available)
+$proportions$by_subgroup     — subgroup % by year (long: subgroup_var, subgroup_val, N, pct)
+$proportions$by_year_grade   — subgroup % within grade
+$proportions$by_school_subgroup — subgroup % within school
+$transitions[[sg]]           — per subgroup var: $table and $summary (pct_change)
+$entry_exit$entering         — performance of Entering students
+$entry_exit$exiting          — performance of Exiting students
+$entry_exit$continuing       — performance of Continuing students
+$aggregate$school            — list: $totals, $by_subgroup (school-level)
+$aggregate$district          — list: $totals, $by_subgroup (district-level)
+$score_enrollment_trends     — YEAR × SUBJECT × GRADE: N_change, delta_mean, year_pair
+$plot$enroll_vs_score        — scatter: enrollment change vs. mean score change
+$text$narrative              — 4-sentence policy summary (auto-generated)
+$params                      — min_n, report_years, subgroup_vars
+```
+
+**Entry/exit group labels** are always Title Case: `"Entering"`, `"Continuing"`,
+`"Exiting"`. These are set inside `compute_entry_exit_performance()`.
+
+**`weighted.mean` ordering in `summarize()`:** Always compute the weighted stat
+*before* the aggregated weight column within the same `summarize()` call. Placing the
+weight column first causes dplyr to resolve `.data[["N"]]` to the scalar sum instead
+of the per-row vector, producing a length-mismatch error.
+
+```r
+# CORRECT — pct_proficient first, N second
+dplyr::summarize(
+  pct_proficient = round(stats::weighted.mean(.data[["pct_proficient"]],
+                                               .data[["N"]], na.rm = TRUE), 1),
+  N = sum(.data[["N"]], na.rm = TRUE),
+  .groups = "drop"
+)
+```
+
+---
+
+## 8c. Line 1.3: General Cohort Analysis
+
+The orchestrator is `run_general_cohort()` in `R/run_general_cohort.R`. It
+wraps `run_cohort_analysis()` (in `R/01_general_cohort.R`) with RDS saving and
+report rendering. This is a **standalone line**, parallel to Line 1 and Line 4
+— not nested within either.
+
+**Key difference from Line 1:** Line 1 tracks population-level trends; Line 1.3
+follows the **same students** (cohorts) across grades using persistent `STUDENT_ID`.
+When `STUDENT_ID`s are not persistent (e.g., the DEMO spec), all STUDENT_ID-dependent
+functions return 0-row data frames without error.
+
+```r
+run_general_cohort(
+  student_results_long,
+  assessment_spec,
+  output_dir,
+  report_years  = NULL,
+  min_n         = 10,
+  render_report = TRUE,
+  open_report   = FALSE
+)
+```
+
+**Important:** Set `attr(assessment_spec, "spec_file") <- "/abs/path/to/spec.R"`
+before calling `run_general_cohort()` so the QMD can source the spec internally.
+
+### Return structure (`cohort_results`)
+
+```
+$summary            — SUBJECT × COHORT_YEAR × GRADE × YEAR stats
+                      (N, MEAN_SCORE, SD_SCORE, MEDIAN_SCORE, Q1_SCORE,
+                       Q3_SCORE, PCT_PROFICIENT, N_<Level> per level)
+$demographics       — long format: DEMOGRAPHIC × GROUP × cell
+$transitions        — FROM_LEVEL × TO_LEVEL proportions across adjacent grades
+$rate_of_change     — Improving/Stable/Declining trajectory proportions
+$correlations       — Pearson r across adjacent grades (GRADE_X, GRADE_Y, R, P_VALUE)
+$crosssectional     — list: $cohort (same as $summary) and $crosssectional
+                      (all-student grade × year snapshot)
+$mobility           — Entering/Continuing/Exiting by FROM_GRADE × TO_GRADE
+$mobility_by_achiev — mobility crossed with ACHIEVEMENT_LEVEL
+$persistence        — N_ORIGINAL, N_ENTERING, N_TOTAL, PCT_RETAINED by cohort
+$enrollment_diag    — list: $table (Z_SCORE, FLAGGED), $narrative
+$plot               — named lists by SUBJECT for each plot type
+$text               — $narrative, $by_subject, $table
+```
+
+### Cohort derivation
+
+`COHORT_YEAR = YEAR - (GRADE - cohort_anchor_grade)`. Computed by `.derive_cohort()`
+internal helper. EOC records (GRADE = NA) get COHORT_YEAR = NA and are excluded.
+Always use `assessment_spec$years$cohort_anchor_grade` — never hardcode `3`.
+
+### Mobility labels
+
+`MOBILITY_STATUS` values are always title-case: `"Entering"`, `"Continuing"`,
+`"Exiting"`. Factor level order is always `c("Entering", "Continuing", "Exiting")`.
+Color palette: Entering = `"#2ca02c"`, Continuing = `"#aec7e8"`, Exiting = `"#d62728"`.
+
+---
+
+## 8d. Line 5: Aggregate (School and District) Analysis
+
+The orchestrator is `run_aggregate_analysis()` in `R/run_aggregate_analysis.R`.
+Helper functions live in `R/aggregate_helpers.R`.
+
+```r
+run_aggregate_analysis(
+  student_results_long,
+  assessment_spec,
+  school_results_long        = NULL,   # not yet available; enables 5.2 and 5.7
+  report_years               = NULL,
+  min_n_school               = 10,
+  min_n_subgroup             = 10,
+  improvement_threshold      = 3,      # pp change to classify improving/declining
+  outlier_sd_threshold       = 2,
+  outlier_n_funnel           = 20,
+  correlation_flag_threshold = 0.85
+)
+```
+
+### Sub-analyses and return structure
+
+| Sub-analysis | Slot | Data required | Status |
+|---|---|---|---|
+| 5.1 Performance trends | `$performance_trends` | `student_results_long` | ✅ runs |
+| 5.2 Accountability grades | `$accountability` | `school_results_long` | NULL — deferred |
+| 5.3 Population shifts | `$population_shifts` | `student_results_long` (co-op/locale deferred) | ✅ partial |
+| 5.4 Outlier identification | `$outliers` | `student_results_long` | ✅ runs |
+| 5.4 Outlier characterization | `$outliers$outlier_characteristics` | `school_results_long` | NULL — deferred |
+| 5.5 Disaggregated gaps | `$disaggregated` | `student_results_long` | ✅ runs |
+| 5.6 Stability | `$stability` | `performance_data` (from 5.1) | ✅ runs |
+| 5.7 Intervention analysis | `$intervention` | `school_results_long` | NULL — deferred |
+
+**Key patterns in `aggregate_helpers.R`:**
+- `.resolve_agg_cols(data)` — resolves school_id, district_id, subject column names
+  (tries `SCHOOL_NUMBER`/`DISTRICT_NUMBER` before `SCHOOL_ID`/`DISTRICT_ID`)
+- `.add_proficient(data, spec)` — derives `PROFICIENT` column from `ACHIEVEMENT_LEVEL`
+- ICC computation uses `lme4::lmer()` (Suggests); returns empty data frame if not installed
+- `compute_stability_analysis()` takes `performance_data` (already computed), not raw data
+- `compute_outlier_schools()` reads demographic proportions from
+  `performance_data$school_level_summary` (populated by `compute_performance_trends()`)
+
+**`school_results_long`** is a planned data source (not yet available) containing
+`ACCOUNTABILITY_GRADE`, `ACCOUNTABILITY_INDEX`, `INDICATOR_*`, `HQIM_FLAG`,
+`LITERACY_COACH_FLAG`, `CO_OP`, `LOCALE`, `SCHOOL_LEVEL`, `SCHOOL_TYPE`.
+When it becomes available, implement `compute_accountability_distributions()` and
+`compute_intervention_analysis()` and pass `school_results_long` to
+`run_aggregate_analysis()`.
+
+---
+
+## 9. Report Structure
+
+### `inst/templates/04_Anomaly_Report.qmd`
+Titled **"Section 4. Score Quality Analysis"**. Sections:
+1. Introduction
+2. Score Distribution Patterns (HOSS/LOSS + shape diagnostics)
+3. Score Integrity
+4. Year-to-Year Outliers
+5. Year-to-Year Correlations
+6. Distribution Diagnostics
+
+### `inst/templates/01_General_Trend_Report.qmd`
+Titled **"Section 1. General Trend Analysis"**. Sections:
+1. Introduction
+2. Scale Score Trends (mean table, change table, mean_trend plots, mean_sd plots)
+3. Proficiency Trends (pct proficient table, change table, trend plot, heatmap)
+4. Scale Score Distributions (density plots per subject)
+
+### `inst/templates/01_General_Cohort_Report.qmd`
+Titled **"Section 1.3. Cohort Composition and Performance"**. Sections:
+1. Sample Sizes and Cohort Coverage → 1b. Enrollment Diagnostics → 1c. Persistence → 1d. Mobility
+2. Mean Scale Scores by Cohort
+3. Proficiency Rates by Cohort
+4. Score Distributions by Cohort
+5. Achievement Level Transitions (Sankey, guarded)
+6. Rates of Change Across Cohorts (guarded)
+7. Demographic Composition
+8. Cohort vs. Cross-Sectional Comparison
+9. Score Correlations (guarded)
+Appendix: Full Summary Tables
+
+All STUDENT_ID-dependent sections wrapped in `nrow() > 0` guards for DEMO compatibility.
+
+### `inst/templates/01_Enrollment_Trends_Report.qmd`
+Titled **"Section 1.2. Enrollment Trends"**. All tables use years across the top
+(pivot pattern from `01_General_Trend_Report.qmd`). Key sections:
+1. Total Enrollment Over Time (overall, by grade, by subject)
+2. Subgroup Composition (N, Pct, dN, dPct per year; year-over-year transition table)
+3. School-Level Enrollment Patterns (distribution of year-to-year changes; boxplot)
+4. District-Level Enrollment Patterns
+5. Enrollment and Score Trends (scatter: N_change vs. delta_mean by subject/grade)
+6. Entering, Continuing, and Exiting Students
+
+### `inst/templates/01_Enrollment_Brief.qmd`
+One-page brief: key figures, top 3 notable shifts, one Sankey diagram (most
+policy-relevant subgroup auto-selected).
+
+### `inst/templates/05_Aggregate_Analysis_Report.qmd`
+Titled **"Section 5. School and District Analysis"**. Renders only from
+`student_results_long`; sections requiring `school_results_long` show a pending notice.
+Key sections:
+1. School Performance Trends (improvement classification, proficiency boxplots, slope histogram)
+2. Demographic Composition and Population Shifts
+3. Outlier Schools (funnel plot, above/below tables, stability)
+4. Within-School Achievement Gaps (gap trend classification, gap boxplots)
+5. Rank-Order Stability (ICC trends)
+6. District-Level Summary
+7. Sections Pending school_results_long (placeholder)
+
+**QMD robustness rule:** Every `facet_wrap` call must be preceded by a row-count guard
+on the filtered data. `facet_wrap` errors with "Faceting variables must have at least one
+value" when the input data frame has zero rows. Pattern:
+
+```r
+plot_data <- raw_data |> dplyr::filter(!is.na(.data[["col"]]))
+if (nrow(plot_data) > 0) {
+  ggplot2::ggplot(plot_data, ...) + ggplot2::facet_wrap(...)
+} else {
+  cat("*No data available.*\n")
+}
+```
+
+**Key QMD conventions for all templates:**
+- Setup chunk: conditional `devtools::load_all(pkg_path)` vs `library(ReportR)`
+- Subsequent chunks read only from the pre-computed results object
+- `flextable` for all tables; `merge_v()` for Subject/Grade columns where appropriate
+- `fig-dpi: 300` in docx format
+
+---
+
+## 10. File and Package Structure
 
 ```
 ReportR/
-├── DESCRIPTION                            ← author: Nathan Dadey <ndadey@nciea.org>
+├── DESCRIPTION
 ├── NAMESPACE
-├── README.md                              ← install instructions + quick start
+├── README.md
 ├── CLAUDE.md
 ├── .Rbuildignore                          ← excludes dev/, MS/, .claude/, Word temp files
 ├── .gitignore                             ← excludes dev/, MS/, *.docx, *.rds, *.csv, *.RData
@@ -403,35 +659,56 @@ ReportR/
 │   ├── spec_helpers.R                    ← get_score_spec(), build_loss_hoss_lookup(),
 │   │                                        benchmark_index()
 │   ├── globals.R                         ← globalVariables() + @importFrom rlang .data :=
-│   ├── run_anomaly_analysis.R            ← orchestrator → returns anomaly_results
-│   ├── 04_anomaly_loss_hoss.R            ← anomaly_results$loss_hoss ✅
-│   ├── 04_anomaly_score_integrity.R      ← anomaly_results$score_integrity ✅
-│   ├── 04_anomaly_outliers.R             ← anomaly_results$outliers ✅
-│   ├── 04_anomaly_correlations.R         ← anomaly_results$correlations ✅
-│   ├── 04_anomaly_distributions.R        ← anomaly_results$distributions ✅
-│   └── 01_trend_overall.R               ← trend_results$overall (partial) 🔶
+│   ├── run_anomaly_analysis.R            ← Line 4 orchestrator
+│   ├── 04_anomaly_loss_hoss.R            ← loss_hoss sub-analysis ✅
+│   ├── 04_anomaly_score_integrity.R      ← score_integrity sub-analysis ✅
+│   ├── 04_anomaly_outliers.R             ← outliers sub-analysis ✅
+│   ├── 04_anomaly_correlations.R         ← correlations sub-analysis ✅
+│   ├── 04_anomaly_distributions.R        ← distributions sub-analysis ✅
+│   ├── run_general_trend_analysis.R      ← Line 1 orchestrator
+│   ├── 01_trend_overall.R               ← score_trends sub-analysis ✅
+│   ├── 01_trend_proficiency.R           ← proficiency sub-analysis ✅
+│   ├── 01_trend_distributions.R         ← distributions sub-analysis ✅
+│   ├── 01_trend_transitions.R           ← achievement_transitions sub-analysis ✅
+│   ├── run_general_cohort.R             ← Line 1.3 orchestrator ✅
+│   ├── 01_general_cohort.R             ← all Line 1.3 cohort functions ✅
+│   ├── utils_enrollment.R              ← suppress_small_n_enroll() + Step 1 comment ✅
+│   ├── 01_trend_enrollment.R           ← all Line 1.2 enrollment functions ✅
+│   ├── run_general_enrollment_analysis.R ← Line 1.2 orchestrator ✅
+│   ├── aggregate_helpers.R             ← all Line 5 compute_* functions ✅
+│   └── run_aggregate_analysis.R        ← Line 5 orchestrator ✅
 │
 ├── inst/
 │   ├── specs/
-│   │   ├── 00_MS_Assessment_Spec.R       ← real spec (MAAP, 5 levels) — reference
-│   │   ├── 00_DEMO_Assessment_Spec.R     ← SGPdata demo (4 levels) — runnable example
-│   │   └── 00_TEMPLATE_Spec.R            ← blank template for new states
+│   │   ├── 00_MS_Assessment_Spec.R       ← MS MAAP (5 levels, nested scale_scores)
+│   │   ├── 00_DEMO_Assessment_Spec.R     ← SGPdata demo (4 levels, nested scale_scores)
+│   │   └── 00_TEMPLATE_Spec.R            ← blank template
 │   ├── templates/
-│   │   └── 04_Anomaly_Report.qmd         ← full report for Line 4 ✅
+│   │   ├── 04_Anomaly_Report.qmd         ← Line 4 report ✅
+│   │   ├── 01_General_Trend_Report.qmd   ← Line 1 report ✅
+│   │   ├── 01_General_Cohort_Report.qmd  ← Line 1.3 report ✅
+│   │   ├── 01_Enrollment_Trends_Report.qmd ← Line 1.2 report ✅
+│   │   ├── 01_Enrollment_Brief.qmd       ← Line 1.2 one-page brief ✅
+│   │   └── 05_Aggregate_Analysis_Report.qmd ← Line 5 report ✅
 │   └── workshop/
-│       └── workshop_anomaly_analysis.R   ← step-by-step workshop script ✅
+│       ├── workshop_anomaly_analysis.R             ← Line 4 demo data walkthrough
+│       ├── workshop_general_trend_analysis.R       ← Line 1 demo data walkthrough
+│       ├── MS_workshop_general_trend_analysis.R    ← MS MAAP driver (Line 1 + Line 4)
+│       ├── MS_workshop_general_cohort_analysis.R   ← MS MAAP driver (Line 1.3)
+│       ├── MS_workshop_enrollment_analysis.R       ← MS MAAP driver (Line 1.2) ✅
+│       └── MS_workshop_aggregate_analysis.R        ← MS MAAP driver (Line 5) ✅
 │
-├── man/                                  ← roxygen2-generated docs
-├── tests/
-│   └── testthat/
-│       ├── test-04_anomaly_loss_hoss.R
-│       └── test-01_trend_overall.R
+├── man/
+├── tests/testthat/
+│   ├── test-04_anomaly_loss_hoss.R
+│   ├── test-01_trend_overall.R
+│   └── test-01_trend_enrollment.R        ← 59 tests for Line 1.2 functions ✅
 └── dev/                                  ← not in git or package (excluded by both)
 ```
 
 ---
 
-## 10. Coding Conventions
+## 11. Coding Conventions
 
 ### Style
 - **Tidyverse throughout**: use `dplyr`, `tidyr`, `ggplot2`; pipe with `|>` (native pipe)
@@ -457,6 +734,35 @@ Any bare column name used in `dplyr`/`ggplot2` non-standard evaluation must be d
 in `R/globals.R` via `utils::globalVariables()`. Add new variables there whenever a
 new function introduces them.
 
+### ggplot objects and large data — CRITICAL performance rule
+
+**Never create a ggplot object inside a function that has `student_results_long` in scope.**
+ggplot2 `aes()` quosures capture their creation environment. If `student_results_long`
+is in the enclosing environment chain, every ggplot object serialized to RDS will carry
+the full student dataset, ballooning the RDS to gigabytes.
+
+**The fix:** define a package-level helper function (outside any other function) that
+builds the ggplot from pre-computed summary data:
+
+```r
+# CORRECT — package-level helper; no student_results_long in scope
+.build_my_plot <- function(summary_df, scalar_args...) {
+  ggplot2::ggplot(summary_df, ggplot2::aes(...)) + ...
+}
+
+# In the analysis function:
+my_plot_function <- function(student_results_long, ...) {
+  # Pre-compute: kernel density (512 pts), summary stats, etc.
+  dens_df <- ...  # small data frame
+  .build_my_plot(dens_df, ...)  # quosures capture .build_my_plot's env only
+}
+```
+
+For density plots specifically: use `stats::density(x, n = 512L)` to pre-compute curve
+data and pass the 512-row data frame to ggplot instead of raw student scores. Examples:
+- `.build_lh_density_plot()` in `04_anomaly_loss_hoss.R`
+- `.build_flagged_density_plot()` in `04_anomaly_distributions.R`
+
 ### roxygen2 Documentation
 Every exported function needs:
 ```r
@@ -471,7 +777,7 @@ Every exported function needs:
 
 ---
 
-## 11. flextable for Word output
+## 12. flextable for Word output
 All formatted tables in `.qmd` templates must use `flextable` — not `knitr::kable()` —
 for Word-compatible output. Standard pattern:
 
@@ -487,7 +793,7 @@ drops/secondary = `"#f6b26b"` (orange), informational = `"#9fc5e8"` (blue).
 
 ---
 
-## 12. DESCRIPTION File
+## 13. DESCRIPTION File (current state)
 
 ```
 Package: ReportR
@@ -499,23 +805,29 @@ Imports:
     tidyr (>= 1.3.0),
     ggplot2 (>= 3.4.0),
     rlang,
-    stats
+    stats,
+    flextable
 Suggests:
     testthat (>= 3.0.0),
     devtools,
     here,
-    flextable,
-    SGPdata
+    openxlsx,
+    SGPdata,
+    ggalluvial,
+    patchwork,
+    lme4,
+    ggrepel
 ```
 
-`flextable` and `here` are in `Suggests` (used in templates/dev scripts, not in package
-functions). `stats` is a base R package and could be dropped from `Imports` without
-consequence. `rlang` ships with `dplyr` but is kept as a direct dependency because
-`.data` and `:=` originate there.
+`flextable` is in `Imports` (used in package functions). `openxlsx` is in `Suggests`
+(export_tables_to_excel). `patchwork` is in `Suggests` (density plot layout in Line 1).
+`ggalluvial` is in `Suggests` (alluvial/Sankey plots in Lines 1 and 1.2).
+`lme4` is in `Suggests` (ICC computation in Line 5 — `compute_performance_trends()`).
+`ggrepel` is in `Suggests` (labeled scatter plots in workshop scripts).
 
 ---
 
-## 13. Testing Expectations
+## 14. Testing Expectations
 
 Every `compute_*()` function must have at least one `testthat` test in
 `tests/testthat/test-NN_module_subsection.R`.
@@ -539,9 +851,9 @@ Always filter by year AFTER standardizing, not before.
 - No `SCHOOL_ID` or `DISTRICT_ID` — Line 3 cannot be run
 - `VALID_CASE` must be filtered before use
 - Scale score cutpoints in DEMO spec are approximate
-- No persistent student IDs across grades — correlation analysis returns 0 rows
+- No persistent student IDs across grades — correlation and transition analyses return 0 rows
 
-### Minimal synthetic data for correlation testing (persistent IDs across grades)
+### Minimal synthetic data for correlation/transition testing (persistent IDs)
 
 ```r
 set.seed(42)
@@ -570,30 +882,6 @@ test_data <- do.call(rbind, lapply(c("ELA", "MATHEMATICS"), function(s) {
 
 ---
 
-## 14. Line 1: Porting Notes for Remaining Functions
-
-`R/01_trend_overall.R` has `compute_score_summary()` and `mean_sd_table_wide()`.
-The following pre-package scripts still need porting:
-
-### What needs to change in every file
-1. **Column names**: replace `CONTENT_AREA` → `SUBJECT` throughout
-2. **`assessment_spec` integration**: add as second argument; read proficiency cuts,
-   level labels, and grade lists from spec rather than inferring from data
-3. **Function naming**: rename to `compute_*()` / `plot_*()` / `summarize_*()` pattern
-
-### Target file mapping
-
-| Existing script | Target package file | New function name(s) |
-|---|---|---|
-| `make_proficiency.R` | `R/01_trend_overall.R` | `compute_proficiency()` |
-| `summarize_proficiency.R` | `R/01_trend_overall.R` | `compute_proficiency_summary()` |
-| `visualize_proficiency.R` | `R/01_trend_overall.R` | `plot_proficiency()` |
-| `visualize_score_density.R` | `R/01_trend_overall.R` | `plot_score_density()` |
-| `summarize_enrollment.R` | `R/01_trend_enrollment.R` | `compute_enrollment_summary()` |
-| `summarize_enrollment_change.R` | `R/01_trend_enrollment.R` | `compute_enrollment_change()` |
-
----
-
 ## 15. Getting Started (for Claude Code in a new session)
 
 1. Read this file completely before touching any code.
@@ -609,4 +897,34 @@ The following pre-package scripts still need porting:
 8. Do not use `dplyr::recode(!!!list)` — use `left_join()` against a lookup data frame.
 9. Do not edit files in `dev/` or `MS/` unless explicitly asked — both are excluded from
    git and the package build.
-10. The tempdir render pattern is required for all driver scripts due to Dropbox file locking.
+10. The tempdir pattern is required for BOTH `saveRDS()` and `quarto_render()` due to
+    Dropbox file locking. See Section 3 for the pattern.
+11. `assessment_spec$scale_scores` uses a **nested** structure — `$SUBJECT$GRADE` for
+    span-tested, `$SUBJECT` for EOC. Never build flat `SUBJECT_GRADE` keys manually.
+12. Never build ggplot objects inside functions that hold `student_results_long` in scope.
+    Pre-compute summary data and delegate to a package-level helper. See Section 11.
+13. Line 1.3 (cohort) is a **standalone line** with its own orchestrator `run_general_cohort()`.
+    It is NOT nested inside `run_general_trend_analysis()`. Call it separately.
+14. For Line 1.3: set `attr(assessment_spec, "spec_file") <- "/abs/path"` before calling
+    `run_general_cohort()` so the QMD can source the spec. Without this, rendering is skipped.
+15. `MOBILITY_STATUS` values are always title-case `"Entering"` / `"Continuing"` / `"Exiting"`.
+    Factor level order is always `c("Entering", "Continuing", "Exiting")`.
+16. The codebase uses **American English** throughout. Use `summarize()` not `summarise()`,
+    `color` not `colour`, etc. `dplyr::summarize()` and `dplyr::summarise()` are exact
+    aliases — both work, but `summarize()` is the project standard.
+17. **School/district column name resolution:** The MS data uses `SCHOOL_NUMBER` and
+    `DISTRICT_NUMBER` (raw SGP format); `standardize_student_results()` renames these to
+    `SCHOOL_ID` and `DISTRICT_ID`. All aggregate functions must try both:
+    `intersect(c("SCHOOL_NUMBER", "SCHOOL_ID"), names(data))[1]`. Never hard-code
+    either form.
+18. **`weighted.mean` in `summarize()`:** Always compute the weighted stat *before* the
+    weight aggregation column in the same `summarize()` call. If `N = sum(N)` is computed
+    first, `.data[["N"]]` in subsequent expressions resolves to the scalar, not the
+    per-row vector, producing a length-mismatch error. See Section 8b.
+19. Line 1.2 (enrollment) is a **standalone line** with its own orchestrator
+    `run_general_enrollment_analysis()`. It accepts `subgroup_vars` to restrict which
+    demographics are analyzed. Entry/exit group labels are Title Case: `"Entering"`,
+    `"Continuing"`, `"Exiting"`.
+20. Line 5 (aggregate) is also standalone. Sub-analyses requiring `school_results_long`
+    are set to `NULL` with explanatory comments — do not implement them until the user
+    confirms that data source is available. See Section 8d for the full list.

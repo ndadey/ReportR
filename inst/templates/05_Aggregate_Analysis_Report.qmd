@@ -1,0 +1,513 @@
+---
+title: "Section 5. School and District Analysis"
+format:
+  docx:
+    toc: true
+    number-sections: true
+    fig-dpi: 300
+  html:
+    toc: true
+    toc-float: true
+    code-fold: true
+editor: visual
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  pkg_path:     null
+  spec_file:    null
+  results_file: null
+  min_n:        10
+---
+
+```{r setup}
+pkg_root <- params$pkg_path
+
+if (!is.null(pkg_root) &&
+    file.exists(file.path(pkg_root, "DESCRIPTION")) &&
+    file.exists(file.path(pkg_root, "R"))) {
+  devtools::load_all(pkg_root)
+} else {
+  library(ReportR)
+}
+
+spec_path <- if (!is.null(params$spec_file) && file.exists(params$spec_file)) {
+  params$spec_file
+} else if (!is.null(pkg_root) && !is.null(params$spec_file)) {
+  file.path(pkg_root, params$spec_file)
+} else {
+  NULL
+}
+if (!is.null(spec_path)) source(spec_path)
+
+aggregate_results <- readRDS(params$results_file)
+min_n             <- params$min_n
+
+# Detect subject column name used in results
+subj_col <- intersect(c("SUBJECT", "CONTENT_AREA"),
+                       names(aggregate_results$performance_trends$school_level_summary))[1]
+
+fmt_ft <- function(ft) {
+  ft |>
+    flextable::bold(part = "header") |>
+    flextable::fontsize(size = 9, part = "all") |>
+    flextable::set_table_properties(layout = "autofit", width = 1)
+}
+```
+
+## Introduction
+
+```{r subtitle, results='asis'}
+cat("###", assessment_spec$program$name, "\n")
+```
+
+This section presents school- and district-level findings for `r assessment_spec$program$name`. Analyses are organized into five areas: (1) performance trends, (2) demographic composition and population shifts, (3) outlier schools performing above or below demographic expectation, (4) within-school achievement gaps, and (5) rank-order stability. Cells with fewer than `r min_n` students are suppressed throughout.
+
+```{r data-availability, results='asis'}
+p <- aggregate_results$params
+if (!isTRUE(p$school_results_available)) {
+  cat("> **Note:** Sections 5.2 (Accountability Grade Distributions) and 5.7",
+      "(Intervention Analysis) require `school_results_long` and are not shown",
+      "in this report.\n")
+}
+```
+
+------------------------------------------------------------------------
+
+## School Performance Trends
+
+### Improvement Classification
+
+Schools are classified as **improving**, **stable**, or **declining** based on year-to-year change in percent proficient (threshold: ±`r aggregate_results$params$improvement_threshold` percentage points).
+
+```{r tbl-improvement, tab.cap="School Improvement Classification by Year and Subject"}
+imp <- aggregate_results$performance_trends$improvement_classification
+
+if (!is.null(imp) && nrow(imp) > 0) {
+  tbl <- imp |>
+    dplyr::count(.data[[subj_col]], YEAR, classification) |>
+    tidyr::pivot_wider(names_from = classification, values_from = n,
+                       values_fill = 0) |>
+    dplyr::arrange(.data[[subj_col]], YEAR)
+
+  fmt_ft(flextable::flextable(tbl))
+} else {
+  cat("*Improvement classification data not available.*\n")
+}
+```
+
+### School Proficiency Distribution by Year
+
+```{r plot-proficiency-dist, fig.width=9, fig.height=5}
+school_tbl <- aggregate_results$performance_trends$school_level_summary
+school_plot_data <- if (!is.null(school_tbl))
+  school_tbl |> dplyr::filter(!is.na(.data[["pct_proficient"]])) else data.frame()
+
+if (nrow(school_plot_data) > 0) {
+  ggplot2::ggplot(
+    school_plot_data,
+    ggplot2::aes(x = factor(.data[["YEAR"]]), y = .data[["pct_proficient"]])
+  ) +
+    ggplot2::geom_boxplot(fill = "#9fc5e8", alpha = 0.7, outlier.size = 0.8) +
+    ggplot2::facet_wrap(stats::as.formula(paste("~", subj_col))) +
+    ggplot2::labs(
+      title = paste("Distribution of School Proficiency Rates —",
+                    assessment_spec$program$short_name),
+      x = "Year", y = "% Proficient"
+    ) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+} else {
+  cat("*School proficiency data not available.*\n")
+}
+```
+
+### School-Level Regression Slopes
+
+```{r plot-slopes, fig.width=9, fig.height=4}
+slopes <- aggregate_results$performance_trends$regression_slopes
+slopes_plot <- if (!is.null(slopes) && "slope" %in% names(slopes))
+  slopes |> dplyr::filter(!is.na(.data[["slope"]])) else data.frame()
+
+if (nrow(slopes_plot) > 0) {
+  ggplot2::ggplot(slopes_plot, ggplot2::aes(x = .data[["slope"]])) +
+    ggplot2::geom_histogram(bins = 40, fill = "#9fc5e8", color = "white") +
+    ggplot2::geom_vline(xintercept = 0, linetype = "dashed", color = "#cc0000") +
+    ggplot2::facet_wrap(stats::as.formula(paste("~", subj_col))) +
+    ggplot2::labs(
+      title = "Distribution of School-Level Proficiency Slopes",
+      subtitle = "Positive = improving over time; negative = declining. Dashed line = zero.",
+      x = "Slope (percentage points per year)", y = "Number of Schools"
+    ) +
+    ggplot2::theme_bw()
+} else {
+  cat("*Regression slope data not available (schools may have fewer than 3 years of data).*\n")
+}
+```
+
+### Year-to-Year Correlation Stability
+
+```{r tbl-correlations, tab.cap="Year-to-Year Spearman Rank Correlations of School Proficiency"}
+corr <- aggregate_results$stability$year_to_year_correlations
+
+if (!is.null(corr) && nrow(corr) > 0) {
+  display <- corr |>
+    dplyr::mutate(
+      pearson_r  = round(.data[["pearson_r"]],  3),
+      spearman_r = round(.data[["spearman_r"]], 3),
+      flagged    = ifelse(.data[["flagged"]], "Yes", "")
+    ) |>
+    dplyr::arrange(.data[[subj_col]], .data[["year_pair"]])
+
+  ft <- fmt_ft(flextable::flextable(display))
+
+  # Highlight flagged rows
+  flag_rows <- which(corr[["flagged"]])
+  if (length(flag_rows) > 0) {
+    ft <- flextable::bg(ft, i = flag_rows, bg = "#fce8b2", part = "body")
+  }
+  ft
+} else {
+  cat("*Correlation data not available.*\n")
+}
+```
+
+------------------------------------------------------------------------
+
+## Demographic Composition and Population Shifts
+
+### School Demographic Composition Over Time
+
+```{r tbl-demo-composition, tab.cap="Mean School Demographic Composition by Year (% of students)"}
+demo <- aggregate_results$population_shifts$school_demographic_composition
+
+if (!is.null(demo) && nrow(demo) > 0) {
+  yr_order  <- sort(unique(demo$YEAR))
+  stat_cols <- paste0(yr_order, "_pct")
+
+  school_id_col <- intersect(c("SCHOOL_NUMBER", "SCHOOL_ID"), names(demo))[1]
+
+  summary_tbl <- demo |>
+    dplyr::filter(.data[["demo_val"]] %in% c("Yes", unique(demo$demo_val)[1])) |>
+    dplyr::group_by(.data[["demo_var"]], .data[["YEAR"]]) |>
+    dplyr::summarize(mean_pct = round(mean(.data[["pct"]], na.rm = TRUE), 1),
+                     .groups = "drop") |>
+    dplyr::mutate(col_name = paste0(YEAR, "_pct")) |>
+    dplyr::select(-"YEAR") |>
+    tidyr::pivot_wider(names_from = col_name, values_from = mean_pct) |>
+    dplyr::select(demo_var, dplyr::any_of(stat_cols))
+
+  fmt_ft(
+    flextable::flextable(summary_tbl) |>
+      flextable::set_header_labels(demo_var = "Demographic Variable") |>
+      flextable::add_footer_lines("Values are mean % across all schools.")  |>
+      flextable::fontsize(size = 8, part = "footer")
+  )
+} else {
+  cat("*Demographic composition data not available.*\n")
+}
+```
+
+### Composition Shift vs. Proficiency Change
+
+```{r plot-composition-proficiency, fig.width=9, fig.height=5, results='asis'}
+comp_prof <- aggregate_results$population_shifts$composition_proficiency_join
+
+if (!is.null(comp_prof) && nrow(comp_prof) > 0) {
+  delta_cols <- grep("^delta_", names(comp_prof), value = TRUE)
+  if (length(delta_cols) > 0 && "yoy_change" %in% names(comp_prof)) {
+    first_delta <- delta_cols[1]
+    demo_label  <- sub("^delta_", "", sub("_pct$", "", first_delta))
+
+    p <- ggplot2::ggplot(
+      comp_prof |> dplyr::filter(!is.na(.data[[first_delta]]),
+                                  !is.na(.data[["yoy_change"]])),
+      ggplot2::aes(x = .data[[first_delta]], y = .data[["yoy_change"]])
+    ) +
+      ggplot2::geom_point(alpha = 0.35, size = 1.2, color = "#4472c4") +
+      ggplot2::geom_smooth(method = "lm", formula = y ~ x,
+                           se = TRUE, color = "#cc0000", linewidth = 0.8) +
+      ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+      ggplot2::geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
+      ggplot2::facet_wrap(stats::as.formula(paste("~", subj_col))) +
+      ggplot2::labs(
+        title    = paste("Composition Shift vs. Proficiency Change —", demo_label),
+        subtitle = "Each point = one school-year transition",
+        x        = paste0("Year-over-Year Change in % ", demo_label),
+        y        = "Year-over-Year Change in % Proficient"
+      ) +
+      ggplot2::theme_bw()
+    print(p)
+  }
+} else {
+  cat("*Composition-proficiency data not available.*\n")
+}
+```
+
+------------------------------------------------------------------------
+
+## Outlier Schools
+
+Schools are identified as performing **above** or **below** expectation using a residual model that regresses school proficiency on demographic composition. Schools with residuals exceeding ±`r aggregate_results$params$outlier_sd_threshold` standard deviations are flagged.
+
+### Funnel Plot
+
+```{r plot-funnel, fig.width=9, fig.height=5, results='asis'}
+funnel <- aggregate_results$outliers$funnel_plot_data
+
+if (!is.null(funnel) && nrow(funnel) > 0) {
+  school_id_col <- intersect(c("SCHOOL_NUMBER", "SCHOOL_ID",
+                                "SCHOOL_NAME"), names(funnel))[1]
+  subjs <- sort(unique(funnel[[subj_col]]))
+  most_recent <- max(funnel$YEAR, na.rm = TRUE)
+
+  p <- ggplot2::ggplot(
+    funnel |> dplyr::filter(.data[["YEAR"]] == most_recent),
+    ggplot2::aes(x = .data[["n_tested"]], y = .data[["pct_proficient"]])
+  ) +
+    ggplot2::geom_ribbon(
+      ggplot2::aes(ymin = .data[["lower_99"]], ymax = .data[["upper_99"]]),
+      fill = "#f4cccc", alpha = 0.4
+    ) +
+    ggplot2::geom_ribbon(
+      ggplot2::aes(ymin = .data[["lower_95"]], ymax = .data[["upper_95"]]),
+      fill = "#fce8b2", alpha = 0.5
+    ) +
+    ggplot2::geom_hline(
+      ggplot2::aes(yintercept = .data[["state_pct"]]),
+      linetype = "solid", color = "#4472c4", linewidth = 0.7
+    ) +
+    ggplot2::geom_point(alpha = 0.5, size = 1.5, color = "grey40") +
+    ggplot2::facet_wrap(stats::as.formula(paste("~", subj_col)),
+                        scales = "free_x") +
+    ggplot2::scale_y_continuous(limits = c(0, 100)) +
+    ggplot2::labs(
+      title    = paste("Funnel Plot — School Proficiency vs. Enrollment,",
+                       most_recent),
+      subtitle = "Shaded bands: 95% (yellow) and 99% (red) control limits. Blue line = state average.",
+      x        = "Number of Students Tested",
+      y        = "% Proficient"
+    ) +
+    ggplot2::theme_bw()
+  print(p)
+} else {
+  cat("*Funnel plot data not available.*\n")
+}
+```
+
+### Above-Expectation Schools
+
+```{r tbl-positive-outliers, tab.cap="Schools Performing Above Demographic Expectation (Most Recent Year)"}
+pos <- aggregate_results$outliers$positive_outlier_schools
+
+if (!is.null(pos) && nrow(pos) > 0) {
+  most_recent <- max(pos$YEAR, na.rm = TRUE)
+  display_cols <- intersect(
+    c("SCHOOL_NAME", "DISTRICT_NAME", subj_col, "YEAR",
+      "n_tested", "pct_proficient", "predicted_proficiency", "residual"),
+    names(pos)
+  )
+  fmt_ft(
+    flextable::flextable(
+      pos |>
+        dplyr::filter(.data[["YEAR"]] == most_recent) |>
+        dplyr::select(dplyr::all_of(display_cols)) |>
+        dplyr::mutate(
+          pct_proficient        = round(.data[["pct_proficient"]], 1),
+          predicted_proficiency = round(.data[["predicted_proficiency"]], 1),
+          residual              = round(.data[["residual"]], 1)
+        ) |>
+        dplyr::arrange(dplyr::desc(.data[["residual"]])) |>
+        head(30)
+    )
+  )
+} else {
+  cat("*No above-expectation schools identified.*\n")
+}
+```
+
+### Below-Expectation Schools
+
+```{r tbl-negative-outliers, tab.cap="Schools Performing Below Demographic Expectation (Most Recent Year)"}
+neg <- aggregate_results$outliers$negative_outlier_schools
+
+if (!is.null(neg) && nrow(neg) > 0) {
+  most_recent <- max(neg$YEAR, na.rm = TRUE)
+  display_cols <- intersect(
+    c("SCHOOL_NAME", "DISTRICT_NAME", subj_col, "YEAR",
+      "n_tested", "pct_proficient", "predicted_proficiency", "residual"),
+    names(neg)
+  )
+  fmt_ft(
+    flextable::flextable(
+      neg |>
+        dplyr::filter(.data[["YEAR"]] == most_recent) |>
+        dplyr::select(dplyr::all_of(display_cols)) |>
+        dplyr::mutate(
+          pct_proficient        = round(.data[["pct_proficient"]], 1),
+          predicted_proficiency = round(.data[["predicted_proficiency"]], 1),
+          residual              = round(.data[["residual"]], 1)
+        ) |>
+        dplyr::arrange(.data[["residual"]]) |>
+        head(30)
+    )
+  )
+} else {
+  cat("*No below-expectation schools identified.*\n")
+}
+```
+
+### Persistent Outliers (2+ Years)
+
+```{r tbl-outlier-stability, tab.cap="Schools Flagged as Outliers in Two or More Years"}
+stab <- aggregate_results$outliers$outlier_stability
+
+if (!is.null(stab) && nrow(stab) > 0) {
+  display <- stab |>
+    dplyr::filter(.data[["n_years_flagged"]] >= 2) |>
+    dplyr::arrange(dplyr::desc(.data[["n_years_flagged"]]),
+                   dplyr::desc(abs(.data[["mean_residual"]])))
+  if (nrow(display) > 0) {
+    fmt_ft(flextable::flextable(display))
+  } else {
+    cat("*No schools flagged in 2+ years.*\n")
+  }
+} else {
+  cat("*Outlier stability data not available.*\n")
+}
+```
+
+------------------------------------------------------------------------
+
+## Within-School Achievement Gaps
+
+```{r tbl-gap-trends, tab.cap="Within-School Gap Trend Classification by Subject and Gap Pair"}
+gap_class <- aggregate_results$disaggregated$gap_trend_classification
+
+if (!is.null(gap_class) && nrow(gap_class) > 0) {
+  summary_tbl <- gap_class |>
+    dplyr::count(.data[[subj_col]], gap_pair, trend_direction) |>
+    tidyr::pivot_wider(names_from = trend_direction, values_from = n,
+                       values_fill = 0) |>
+    dplyr::arrange(.data[[subj_col]], gap_pair)
+
+  fmt_ft(
+    flextable::flextable(summary_tbl) |>
+      flextable::set_header_labels(gap_pair = "Gap Pair") |>
+      flextable::add_footer_lines(
+        "narrowing = gap closing over time; widening = gap growing; stable = < 0.5 pp/yr change."
+      ) |>
+      flextable::fontsize(size = 8, part = "footer")
+  )
+} else {
+  cat("*Gap trend classification not available.*\n")
+}
+```
+
+```{r plot-gap-distribution, fig.width=9, fig.height=5, results='asis'}
+gaps <- aggregate_results$disaggregated$within_school_gaps
+
+if (!is.null(gaps) && nrow(gaps) > 0 && "gap_estimate" %in% names(gaps)) {
+  gap_pairs_avail <- sort(unique(gaps$gap_pair))
+  for (gp in gap_pairs_avail[seq_len(min(2, length(gap_pairs_avail)))]) {
+    gap_plot_data <- gaps |>
+      dplyr::filter(.data[["gap_pair"]] == gp,
+                    !is.na(.data[["gap_estimate"]]))
+    if (nrow(gap_plot_data) == 0) next
+    cat("\n\n####", gp, "\n\n")
+    p <- ggplot2::ggplot(
+      gap_plot_data,
+      ggplot2::aes(x = factor(.data[["YEAR"]]), y = .data[["gap_estimate"]])
+    ) +
+      ggplot2::geom_boxplot(fill = "#9fc5e8", alpha = 0.7) +
+      ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "#cc0000") +
+      ggplot2::facet_wrap(stats::as.formula(paste("~", subj_col))) +
+      ggplot2::labs(
+        title    = paste("Within-School Gap:", gp),
+        subtitle = "Positive = advantaged group outperforms; dashed line = no gap.",
+        x = "Year", y = "Gap (percentage points)"
+      ) +
+      ggplot2::theme_bw() +
+      ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+    print(p)
+    cat("\n\n")
+  }
+} else {
+  cat("*Within-school gap data not available.*\n")
+}
+```
+
+------------------------------------------------------------------------
+
+## Rank-Order Stability
+
+```{r plot-icc-trends, fig.width=8, fig.height=4}
+icc <- aggregate_results$stability$icc_trends
+icc_plot <- if (!is.null(icc) && "icc" %in% names(icc))
+  icc |> dplyr::filter(!is.na(.data[["icc"]])) else data.frame()
+
+if (nrow(icc_plot) > 0) {
+  ggplot2::ggplot(
+    icc_plot,
+    ggplot2::aes(x = .data[["YEAR"]], y = .data[["icc"]],
+                 color = .data[[subj_col]], group = .data[[subj_col]])
+  ) +
+    ggplot2::geom_line(linewidth = 1) +
+    ggplot2::geom_point(size = 2) +
+    ggplot2::scale_y_continuous(limits = c(0, 1)) +
+    ggplot2::labs(
+      title    = "Intraclass Correlations Over Time",
+      subtitle = "Higher ICC = more variance between schools than within schools.",
+      x = "Year", y = "ICC", color = "Subject"
+    ) +
+    ggplot2::theme_bw()
+} else {
+  cat("*ICC trend data not available (requires lme4 package).*\n")
+}
+```
+
+------------------------------------------------------------------------
+
+## District-Level Summary
+
+```{r tbl-district-summary, tab.cap="District Proficiency Summary (Most Recent Year)"}
+dist_tbl <- aggregate_results$performance_trends$district_level_summary
+
+if (!is.null(dist_tbl) && nrow(dist_tbl) > 0) {
+  most_recent <- max(dist_tbl$YEAR, na.rm = TRUE)
+  district_id_col <- intersect(c("DISTRICT_NUMBER", "DISTRICT_ID"), names(dist_tbl))[1]
+
+  display <- dist_tbl |>
+    dplyr::filter(.data[["YEAR"]] == most_recent,
+                  !is.na(.data[["pct_proficient"]])) |>
+    dplyr::group_by(dplyr::across(dplyr::all_of(
+      intersect(c(district_id_col, "DISTRICT_NAME", subj_col), names(dist_tbl))
+    ))) |>
+    dplyr::summarize(
+      # pct_proficient must be computed before N so that .data[["N"]] still
+      # refers to the original per-row weight vector, not the scalar sum
+      pct_proficient = round(stats::weighted.mean(
+        .data[["pct_proficient"]], .data[["N"]], na.rm = TRUE), 1),
+      N              = sum(.data[["N"]], na.rm = TRUE),
+      .groups = "drop"
+    ) |>
+    dplyr::arrange(.data[[subj_col]], dplyr::desc(.data[["pct_proficient"]]))
+
+  fmt_ft(flextable::flextable(display))
+} else {
+  cat("*District summary data not available.*\n")
+}
+```
+
+------------------------------------------------------------------------
+
+## Sections Pending school_results_long
+
+The following sections are planned but require `school_results_long`, which is not yet available:
+
+- **5.2 Accountability Grade Distributions** — requires `ACCOUNTABILITY_GRADE`, `ACCOUNTABILITY_INDEX`, and indicator scores
+- **5.4 Outlier Characterization** — requires `CO_OP`, `LOCALE`, `HQIM_FLAG`, `LITERACY_COACH_FLAG`
+- **5.7 Intervention Analysis** — requires `HQIM_FLAG` and `LITERACY_COACH_FLAG` for propensity-matched comparisons
+
+When `school_results_long` is available, rerun `run_aggregate_analysis()` with `school_results_long` provided and re-render this report.

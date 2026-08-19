@@ -65,7 +65,7 @@ This section conducts a series of diagnostic checks to identify **potential scor
 
 ### Potential Ceiling and Floor Effects
 
-Students scoring at or very near the highest obtainable scale score (HOSS) or lowest obtainable scale score (LOSS) may warrant further investigation. This section reports the percentage of students scoring within `r anomaly_results$params$point_adjust` points of either boundary for each year–grade–subject combination.
+*Students* *scoring* at or very near the highest obtainable scale score (HOSS) or lowest obtainable scale score (LOSS) may warrant further investigation. This section reports the percentage of students scoring within `r anomaly_results$params$point_adjust` points of either boundary for each year–grade–subject combination.
 
 ```{r loss-hoss-narrative, results='asis'}
 cat(anomaly_results$loss_hoss$text$narrative, sep = "\n\n")
@@ -204,7 +204,7 @@ if (nrow(anomaly_results$score_integrity$text$table) > 0) {
 
 ## Year-to-Year Outliers
 
-This section identifies year–subject–grade combinations where the year-to-year change in mean scale score, percent proficient, or binary demographic composition falls outside the expected range. For each metric the expected range is defined as the mean change ± 2 standard deviations across all subject-grade combinations with a prior year of data. Cells exceeding ±2 SD are flagged as **Mild**; cells exceeding ±3 SD are flagged as **Severe**. When multiple metrics are flagged for the same cell, the metric with the largest standardised deviation is reported.
+This section identifies year–subject–grade combinations where the year-to-year change in mean scale score, percent proficient, or binary demographic composition falls outside the expected range. For each metric the expected range is defined as the mean change ± 2 standard deviations across all subject-grade combinations with a prior year of data. Cells exceeding ±2 SD are flagged as **Mild**; cells exceeding ±3 SD are flagged as **Severe**. When multiple metrics are flagged for the same cell, the metric with the largest standardized deviation is reported.
 
 ```{r outliers-narrative, results='asis'}
 cat(anomaly_results$outliers$text$narrative, sep = "\n\n")

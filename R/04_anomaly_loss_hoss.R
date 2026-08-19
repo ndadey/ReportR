@@ -153,7 +153,7 @@ compute_loss_hoss_table <- function(student_results_long,
 #' Cleveland dot plot of near-LOSS or near-HOSS percentages
 #'
 #' Displays the percentage of students near the LOSS or HOSS boundary for each
-#' grade (y-axis), with years differentiated by colour. A horizontal line spans
+#' grade (y-axis), with years differentiated by color. A horizontal line spans
 #' the min–max range across years for each grade to show year-to-year movement.
 #' Faceted by subject with subjects arranged as columns so the plot stays
 #' page-width and fits comfortably on a portrait page.
@@ -205,7 +205,7 @@ plot_loss_hoss_cleveland <- function(loss_hoss_table,
   range_dat <- dat |>
     dplyr::filter(!is.na(.data[[pct_var]])) |>
     dplyr::group_by(.data[["grade"]], .data[["subject"]]) |>
-    dplyr::summarise(
+    dplyr::summarize(
       x_min = min(.data[[pct_var]], na.rm = TRUE),
       x_max = max(.data[[pct_var]], na.rm = TRUE),
       .groups = "drop"
@@ -499,12 +499,55 @@ summarize_loss_hoss_findings <- function(loss_hoss_table) {
 #' plots <- plot_loss_hoss_distributions(demo_data, assessment_spec, tbl)
 #' plots[["ELA_Grade3"]]
 #' }
+
+# Package-level helper — builds one density plot from pre-computed curve data.
+# Defined OUTSIDE plot_loss_hoss_distributions so its environment never holds
+# student_results_long; ggplot quosures therefore capture only small objects.
+.build_lh_density_plot <- function(dens_dat, x_lo, x_hi,
+                                    hoss_val, loss_val,
+                                    cuts_in, ann_text, title_str) {
+  p <- ggplot2::ggplot(
+    dens_dat,
+    ggplot2::aes(x = .data[["x"]], y = .data[["y"]],
+                 color = .data[["year_lbl"]], group = .data[["year_lbl"]])
+  ) +
+    ggplot2::geom_line(linewidth = 0.7) +
+    ggplot2::geom_vline(xintercept = hoss_val, linetype = "dashed",
+                        color = "#cc0000", linewidth = 0.9) +
+    ggplot2::annotate("text", x = hoss_val, y = Inf, label = " HOSS",
+                      hjust = 0, vjust = 1.5, color = "#cc0000", size = 2.8) +
+    ggplot2::geom_vline(xintercept = loss_val, linetype = "dashed",
+                        color = "#1565c0", linewidth = 0.9) +
+    ggplot2::annotate("text", x = loss_val, y = Inf, label = "LOSS ",
+                      hjust = 1, vjust = 1.5, color = "#1565c0", size = 2.8)
+
+  if (length(cuts_in) > 0L) {
+    p <- p + ggplot2::geom_vline(
+      data = data.frame(cut = cuts_in),
+      ggplot2::aes(xintercept = .data[["cut"]]),
+      linetype = "solid", color = "grey60", linewidth = 0.4,
+      inherit.aes = FALSE
+    )
+  }
+
+  p +
+    ggplot2::annotate("text", x = -Inf, y = Inf, label = ann_text,
+                      hjust = -0.03, vjust = 1.1, size = 2.3, color = "grey25") +
+    ggplot2::scale_x_continuous(limits = c(x_lo, x_hi)) +
+    ggplot2::labs(title = title_str, x = "Scale Score",
+                  y = "Density", color = "Year") +
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(plot.title      = ggplot2::element_text(face = "bold"),
+                   legend.position = "right")
+}
+
 plot_loss_hoss_distributions <- function(student_results_long,
                                          assessment_spec,
                                          loss_hoss_table,
                                          distribution_table = NULL,
                                          point_adjust = 5,
-                                         x_margin = 10) {
+                                         x_margin = 10,
+                                         max_n_density = 5000L) {
   stopifnot(
     is.data.frame(student_results_long),
     is.list(assessment_spec),
@@ -526,6 +569,17 @@ plot_loss_hoss_distributions <- function(student_results_long,
               all(c("skewness", "bimodality_coefficient") %in%
                     names(distribution_table))
 
+  # Pre-split data by SUBJECT+GRADE so each cell doesn't re-scan the full table
+  split_data <- student_results_long |>
+    dplyr::select("SUBJECT", "GRADE", "YEAR", "SCALE_SCORE") |>
+    dplyr::filter(!is.na(.data[["SCALE_SCORE"]])) |>
+    dplyr::group_by(.data[["SUBJECT"]], .data[["GRADE"]]) |>
+    dplyr::group_split()
+
+  split_keys <- lapply(split_data, function(d)
+    list(SUBJECT = d[["SUBJECT"]][1L], GRADE = d[["GRADE"]][1L])
+  )
+
   plots <- lapply(seq_len(nrow(all_cells)), function(i) {
     subj  <- all_cells[["SUBJECT"]][i]
     grade <- all_cells[["GRADE"]][i]
@@ -543,8 +597,8 @@ plot_loss_hoss_distributions <- function(student_results_long,
     x_hi      <- hoss_val + x_margin
 
     # Cut scores from spec
-    spec_key <- if (is.na(grade)) subj else paste(subj, grade, sep = "_")
-    cuts     <- assessment_spec$scale_scores[[spec_key]]$cuts
+    cuts <- get_score_spec(assessment_spec, subj,
+                           if (is.na(grade)) NULL else grade)$cuts
 
     grade_lbl <- if (is.na(grade)) "EOC" else paste0("Grade ", grade)
     title_str <- paste0(subj, " \u2014 ", grade_lbl)
@@ -577,65 +631,35 @@ plot_loss_hoss_distributions <- function(student_results_long,
 
     ann_text <- paste(ann_rows, collapse = "\n")
 
-    # Student data for this subject/grade, all years
-    dat <- student_results_long |>
-      dplyr::filter(
-        .data[["SUBJECT"]] == subj,
-        if (is.na(grade)) is.na(.data[["GRADE"]]) else .data[["GRADE"]] == grade
-      ) |>
-      dplyr::mutate(year_lbl = factor(.data[["YEAR"]]))
+    # Retrieve pre-split data for this cell (avoids re-scanning full table)
+    cell_idx <- which(vapply(split_keys, function(k)
+      k[["SUBJECT"]] == subj &&
+      (if (is.na(grade)) is.na(k[["GRADE"]]) else
+         !is.na(k[["GRADE"]]) && k[["GRADE"]] == grade),
+      logical(1)
+    ))
 
-    p <- ggplot2::ggplot(
-      dat,
-      ggplot2::aes(x = .data[["SCALE_SCORE"]], color = .data[["year_lbl"]])
-    ) +
-      ggplot2::geom_density(linewidth = 0.7) +
-      # HOSS boundary (red dashed)
-      ggplot2::geom_vline(xintercept = hoss_val, linetype = "dashed",
-                          color = "#cc0000", linewidth = 0.9) +
-      ggplot2::annotate("text", x = hoss_val, y = Inf, label = " HOSS",
-                        hjust = 0, vjust = 1.5, color = "#cc0000", size = 2.8) +
-      # LOSS boundary (blue dashed)
-      ggplot2::geom_vline(xintercept = loss_val, linetype = "dashed",
-                          color = "#1565c0", linewidth = 0.9) +
-      ggplot2::annotate("text", x = loss_val, y = Inf, label = "LOSS ",
-                        hjust = 1, vjust = 1.5, color = "#1565c0", size = 2.8)
+    if (length(cell_idx) == 0L) return(NULL)
+    raw_dat <- split_data[[cell_idx[1L]]]
 
-    # Cut score lines within plot range
-    if (!is.null(cuts) && length(cuts) > 0) {
-      cuts_in <- cuts[cuts > x_lo & cuts < x_hi]
-      if (length(cuts_in) > 0) {
-        p <- p +
-          ggplot2::geom_vline(
-            data = data.frame(cut = cuts_in),
-            ggplot2::aes(xintercept = .data[["cut"]]),
-            linetype = "solid", color = "grey60", linewidth = 0.4,
-            inherit.aes = FALSE
-          )
-      }
-    }
+    # Pre-compute kernel density (512 pts/year) — ggplot stores curves, not raw data
+    yrs_cell <- sort(unique(raw_dat[["YEAR"]]))
+    dens_rows <- lapply(yrs_cell, function(yr) {
+      scores <- raw_dat[["SCALE_SCORE"]][raw_dat[["YEAR"]] == yr &
+                                         !is.na(raw_dat[["SCALE_SCORE"]])]
+      if (length(scores) < 2L) return(NULL)
+      d <- stats::density(scores, n = 512L, from = x_lo, to = x_hi)
+      data.frame(x = d$x, y = d$y, year_lbl = factor(yr))
+    })
+    dens_dat <- do.call(rbind, dens_rows)
+    if (is.null(dens_dat) || nrow(dens_dat) == 0L) return(NULL)
 
-    # Per-year stats annotation (top-left)
-    p +
-      ggplot2::annotate(
-        "text",
-        x = -Inf, y = Inf,
-        label = ann_text,
-        hjust = -0.03, vjust = 1.1,
-        size = 2.3, color = "grey25"
-      ) +
-      ggplot2::scale_x_continuous(limits = c(x_lo, x_hi)) +
-      ggplot2::labs(
-        title = title_str,
-        x     = "Scale Score",
-        y     = "Density",
-        color = "Year"
-      ) +
-      ggplot2::theme_minimal(base_size = 11) +
-      ggplot2::theme(
-        plot.title      = ggplot2::element_text(face = "bold"),
-        legend.position = "right"
-      )
+    cuts_in <- if (!is.null(cuts) && length(cuts) > 0L)
+      cuts[cuts > x_lo & cuts < x_hi] else numeric(0L)
+
+    # Delegate to package-level helper — no reference to student_results_long
+    .build_lh_density_plot(dens_dat, x_lo, x_hi, hoss_val, loss_val,
+                            cuts_in, ann_text, title_str)
   })
 
   nms <- paste0(
@@ -654,7 +678,7 @@ plot_loss_hoss_distributions <- function(student_results_long,
 #' Run the HOSS/LOSS pileup analysis and return the results sub-list
 #'
 #' Orchestrates `compute_loss_hoss_table()`, all four plot functions, and
-#' `summarize_loss_hoss_findings()` into the standardised sub-list consumed by
+#' `summarize_loss_hoss_findings()` into the standardized sub-list consumed by
 #' [run_anomaly_analysis()].
 #'
 #' @param student_results_long A long-format student results data frame.
@@ -704,12 +728,7 @@ run_loss_hoss <- function(student_results_long,
     plot_loss_heat      = plot_loss_hoss_heatmap(tbl,   metric = "loss"),
     plot_hoss_line      = plot_loss_hoss_over_time(tbl, metric = "hoss"),
     plot_loss_line      = plot_loss_hoss_over_time(tbl, metric = "loss"),
-    plot_distributions  = plot_loss_hoss_distributions(
-                            student_results_long = student_results_long,
-                            assessment_spec      = assessment_spec,
-                            loss_hoss_table      = tbl,
-                            point_adjust         = point_adjust
-                          ),
+    plot_distributions  = NULL,   # regenerated by orchestrator with dist stats
     text                = summarize_loss_hoss_findings(tbl)
   )
 }
