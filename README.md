@@ -38,6 +38,19 @@ three-step workflow: **Setup → Modular Analysis → Quarto Report**.
 | 5 | **Aggregate Analysis** — school- and district-level performance | Complete (partial — see below) |
 | 4 | **Score Quality Analysis** — diagnostic checks for unusual patterns | Complete |
 
+## Data Format
+
+All analysis functions consume a single long-format data frame called
+`student_results_long` — one row per student × year × subject. It is derived from the
+**SGP long format** used by the Center for Assessment's SGP ecosystem and produced by
+`standardize_student_results()`.
+
+See **[`internal_docs/NOTES-student_results_long.md`](internal_docs/NOTES-student_results_long.md)**
+for the full data contract: required columns, raw alias map, state-specific recoding
+patterns, EOC handling, and the SGP lineage.
+
+---
+
 ## Quick Start
 
 ### Step 1 — Create an assessment spec

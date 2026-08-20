@@ -62,6 +62,7 @@ devtools::install_github("ndadey/ReportR")
 | `inst/templates/04_Anomaly_Report.qmd` | ✅ Complete | Full report template for Line 4 |
 | `inst/templates/01_General_Trend_Report.qmd` | ✅ Complete | Full report template for Line 1 |
 | `inst/specs/00_MS_Assessment_Spec.R` | ✅ Complete | Mississippi MAAP (5 levels) — nested scale_scores structure |
+| `inst/specs/00_AR_Assessment_Spec.R` | ✅ Complete | Arkansas ATLAS (4 levels) — nested scale_scores structure |
 | `inst/specs/00_DEMO_Assessment_Spec.R` | ✅ Complete | SGPdata demo (4 levels) — nested scale_scores structure |
 | `inst/specs/00_TEMPLATE_Spec.R` | ✅ Complete | Blank template for new states |
 | `inst/workshop/workshop_anomaly_analysis.R` | ✅ Complete | Step-by-step workshop script for Line 4 (demo data) |
@@ -81,6 +82,7 @@ devtools::install_github("ndadey/ReportR")
 | `R/run_aggregate_analysis.R` | ✅ Complete | Line 5 orchestrator — returns `aggregate_results` |
 | `inst/templates/05_Aggregate_Analysis_Report.qmd` | ✅ Complete | Full report template for Line 5 (student_results_long sections) |
 | `inst/workshop/MS_workshop_aggregate_analysis.R` | ✅ Complete | MS MAAP driver for Line 5 |
+| `inst/workshop/run_state.R` | ✅ Complete | Generic single-state runner — set `STATE <- "AR"` etc. to switch states |
 | `README.md` | ✅ Complete | Install instructions, quick start, package overview |
 
 ### What is not yet built
@@ -116,33 +118,29 @@ Each `run_*_analysis()` orchestrator:
 - Narrative text is pulled from `$text$narrative` — never written inline in the `.qmd`
 
 ### Driver scripts
-- `inst/workshop/MS_workshop_general_trend_analysis.R` — MS MAAP driver for Line 1 + Line 4
+- `inst/workshop/run_state.R` — **primary runner**: set `STATE` and `ANALYSES` at the top, sources `states/_config.R` automatically
+- `AR/AR_run_all.R` — AR master driver (all five lines); individual `AR/AR_run_*.R` scripts per line
 - `inst/workshop/MS_workshop_general_cohort_analysis.R` — MS MAAP driver for Line 1.3
-- `MS/run_anomaly_report.R` — MS-only anomaly driver (uses `here::here()`)
+- `inst/workshop/MS_workshop_enrollment_analysis.R` — MS MAAP driver for Line 1.2
+- `inst/workshop/MS_workshop_aggregate_analysis.R` — MS MAAP driver for Line 5
 - Demo workshop scripts: `inst/workshop/workshop_anomaly_analysis.R` and `workshop_general_trend_analysis.R`
 
-**Critical: Dropbox pattern for all file operations.** Two separate issues require
-using `tempdir()`:
+### RDS + render pattern
 
-1. **`saveRDS()`** — Dropbox locks `.rds` files during sync. Always save to `tempdir()`
-   first, then `file.copy()` to the output directory.
-2. **`quarto_render()`** — Dropbox locks the intermediate `_files/` folder Quarto creates.
-   Always copy the QMD to `tempdir()` before rendering, and point `results_file` at the
-   tempdir copy of the RDS.
+Save RDS directly to the output directory. Copy the QMD there before rendering
+(to keep Quarto's intermediate `_files/` folder out of the package source tree),
+then remove it afterwards:
 
 ```r
-RENDER_DIR <- file.path(tempdir(), "ReportR_render")
-dir.create(RENDER_DIR, showWarnings = FALSE)
+# Save RDS directly
+saveRDS(results, file.path(output_dir, "results.rds"))
 
-# Save RDS to tempdir first
-rds_tmp <- file.path(RENDER_DIR, "results.rds")
-saveRDS(results, rds_tmp)
-file.copy(rds_tmp, file.path(OUTPUT_DIR, "results.rds"), overwrite = TRUE)
-
-# Copy QMD and render from tempdir
-qmd_local <- file.path(RENDER_DIR, "Report.qmd")
+# Copy QMD, render, clean up
+qmd_local <- file.path(output_dir, "Report.qmd")
 file.copy(qmd_src, qmd_local, overwrite = TRUE)
-quarto::quarto_render(input = qmd_local, ..., execute_params = list(results_file = rds_tmp))
+quarto::quarto_render(input = qmd_local, ...,
+  execute_params = list(results_file = file.path(output_dir, "results.rds")))
+file.remove(qmd_local)
 ```
 
 ---
@@ -164,9 +162,7 @@ becomes `library(ReportR)` and `pkg_path` is no longer needed.
 **`spec_file`** is relative to `pkg_path` (e.g. `"inst/specs/00_MS_Assessment_Spec.R"`).
 With an installed package, users pass the output of `system.file(...)` directly.
 
-**`results_file`** is an absolute path. Driver scripts pass the already-resolved tempdir
-path (not a relative string) to avoid path resolution issues inside the temp render
-directory.
+**`results_file`** is an absolute path. Driver scripts pass the path directly in `output_dir` — no intermediate tempdir is used.
 
 ---
 
@@ -681,6 +677,7 @@ ReportR/
 ├── inst/
 │   ├── specs/
 │   │   ├── 00_MS_Assessment_Spec.R       ← MS MAAP (5 levels, nested scale_scores)
+│   │   ├── 00_AR_Assessment_Spec.R       ← Arkansas ATLAS (4 levels, nested scale_scores)
 │   │   ├── 00_DEMO_Assessment_Spec.R     ← SGPdata demo (4 levels, nested scale_scores)
 │   │   └── 00_TEMPLATE_Spec.R            ← blank template
 │   ├── templates/
@@ -691,12 +688,28 @@ ReportR/
 │   │   ├── 01_Enrollment_Brief.qmd       ← Line 1.2 one-page brief ✅
 │   │   └── 05_Aggregate_Analysis_Report.qmd ← Line 5 report ✅
 │   └── workshop/
+│       ├── run_state.R                             ← generic single-state runner ✅
 │       ├── workshop_anomaly_analysis.R             ← Line 4 demo data walkthrough
 │       ├── workshop_general_trend_analysis.R       ← Line 1 demo data walkthrough
-│       ├── MS_workshop_general_trend_analysis.R    ← MS MAAP driver (Line 1 + Line 4)
 │       ├── MS_workshop_general_cohort_analysis.R   ← MS MAAP driver (Line 1.3)
 │       ├── MS_workshop_enrollment_analysis.R       ← MS MAAP driver (Line 1.2) ✅
-│       └── MS_workshop_aggregate_analysis.R        ← MS MAAP driver (Line 5) ✅
+│       ├── MS_workshop_aggregate_analysis.R        ← MS MAAP driver (Line 5) ✅
+│       ├── MS_workshop_anomaly_analysis.R          ← MS MAAP driver (Line 4)
+│       └── Old/                                    ← archived originals
+│
+├── states/
+│   ├── _config_template.R            ← skeleton; copy to _config.R locally and fill in paths
+│   ├── _config.R                     ← gitignored: maps state codes → spec/setup/output paths
+│   ├── DEMO/_setup.R                 ← portable SGPdata loader (committed)
+│   ├── MS/_setup.R                   ← gitignored: MS data loader + recoding
+│   └── AR/_setup.R                   ← gitignored: AR data loader + recoding
+│
+├── AR/                               ← Arkansas working directory (analogous to MS/)
+│   ├── 00_AR_setup.R                 ← data loader + column/level recoding
+│   ├── AR_run_all.R                  ← master driver (all five lines)
+│   ├── AR_run_trend.R  AR_run_enrollment.R  AR_run_cohort.R
+│   ├── AR_run_anomaly.R  AR_run_aggregate.R
+│   └── output/                       ← rendered reports + RDS (gitignored by extension)
 │
 ├── man/
 ├── tests/testthat/
@@ -897,8 +910,14 @@ test_data <- do.call(rbind, lapply(c("ELA", "MATHEMATICS"), function(s) {
 8. Do not use `dplyr::recode(!!!list)` — use `left_join()` against a lookup data frame.
 9. Do not edit files in `dev/` or `MS/` unless explicitly asked — both are excluded from
    git and the package build.
-10. The tempdir pattern is required for BOTH `saveRDS()` and `quarto_render()` due to
-    Dropbox file locking. See Section 3 for the pattern.
+9b. **Per-state configuration:** `states/_config.R` (gitignored; copy from `states/_config_template.R`)
+    maps state codes to spec path, setup script path, and output directory. `PKG_ROOT` is the only
+    machine-specific path in the system. Per-state data-loading scripts (`states/{STATE}/_setup.R`)
+    are also gitignored; `states/DEMO/_setup.R` is committed and portable. The AR working directory
+    (`AR/`) uses `AR/00_AR_setup.R` directly rather than `states/AR/_setup.R`.
+10. Save RDS directly to the output directory. Copy the QMD to the output directory before
+    rendering (keeps Quarto's `_files/` out of the package source tree), then `file.remove()`
+    the copied QMD after rendering. See Section 3 for the pattern.
 11. `assessment_spec$scale_scores` uses a **nested** structure — `$SUBJECT$GRADE` for
     span-tested, `$SUBJECT` for EOC. Never build flat `SUBJECT_GRADE` keys manually.
 12. Never build ggplot objects inside functions that hold `student_results_long` in scope.

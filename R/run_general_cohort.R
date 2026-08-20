@@ -4,8 +4,7 @@
 #' @description Standalone orchestrator for Line 1.3 cohort composition and
 #'   performance analysis. Parallel to [run_general_trend_analysis()] (Line 1)
 #'   and [run_anomaly_analysis()] (Line 4). Runs [run_cohort_analysis()], saves
-#'   results to RDS using the Dropbox-safe tempdir pattern, and optionally
-#'   renders the Quarto report.
+#'   results to RDS, and optionally renders the Quarto report.
 #'
 #' @param student_results_long A standardized long-format student results data
 #'   frame (see data contract in `CLAUDE.md §6`). Must have already been
@@ -69,16 +68,11 @@ run_general_cohort <- function(student_results_long,
   cohort_results <- run_cohort_analysis(student_results_long, assessment_spec,
                                          min_n = min_n)
 
-  # --- 3. Save RDS via tempdir (Dropbox-safe) ------------------------------
-  RENDER_DIR <- file.path(tempdir(), "ReportR_render")
-  dir.create(RENDER_DIR, recursive = TRUE, showWarnings = FALSE)
-
-  rds_tmp <- file.path(RENDER_DIR, "cohort_results.rds")
-  message("Saving RDS to tempdir...")
-  saveRDS(cohort_results, rds_tmp)
-  file.copy(rds_tmp, file.path(output_dir, "cohort_results.rds"),
-            overwrite = TRUE)
-  message("RDS saved to: ", file.path(output_dir, "cohort_results.rds"))
+  # --- 3. Save RDS ----------------------------------------------------------
+  rds_path <- file.path(output_dir, "cohort_results.rds")
+  message("Saving RDS...")
+  saveRDS(cohort_results, rds_path)
+  message("RDS saved to: ", rds_path)
 
   # --- 4. Render report (optional) -----------------------------------------
   if (render_report) {
@@ -99,7 +93,7 @@ run_general_cohort <- function(student_results_long,
       return(invisible(cohort_results))
     }
 
-    qmd_local <- file.path(RENDER_DIR, "01_General_Cohort_Report.qmd")
+    qmd_local <- file.path(output_dir, "01_General_Cohort_Report.qmd")
     copied    <- file.copy(qmd_src, qmd_local, overwrite = TRUE)
     if (!copied) {
       warning("Could not copy QMD template; skipping render.")
@@ -125,13 +119,13 @@ run_general_cohort <- function(student_results_long,
       execute_params = list(
         pkg_path     = pkg_path,
         spec_file    = spec_file,
-        results_file = rds_tmp,
+        results_file = rds_path,
         min_n        = min_n
       )
     )
 
     final_html <- file.path(output_dir, output_file)
-    file.copy(file.path(RENDER_DIR, output_file), final_html, overwrite = TRUE)
+    file.remove(qmd_local)
     message("Report written to: ", final_html)
 
     if (open_report && file.exists(final_html)) {

@@ -24,8 +24,6 @@ source(SPEC_FILE)
 # STEP 2: Run the Analysis
 # =============================================================================
 
-RENDER_DIR <- file.path(tempdir(), "ReportR_render")
-dir.create(RENDER_DIR, recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path(PKG_ROOT, "output"), recursive = TRUE, showWarnings = FALSE)
 
 general_trend_results <- run_general_trend_analysis(
@@ -37,10 +35,8 @@ general_trend_results <- run_general_trend_analysis(
   prof_flat_threshold  = 0.5
 )
 
-results_file_tmp <- file.path(RENDER_DIR, "general_trend_results.rds")
-results_file     <- file.path(PKG_ROOT,   "output/general_trend_results.rds")
-saveRDS(general_trend_results, results_file_tmp)
-file.copy(results_file_tmp, results_file, overwrite = TRUE)
+results_file <- file.path(PKG_ROOT, "output/general_trend_results.rds")
+saveRDS(general_trend_results, results_file)
 
 
 # =============================================================================
@@ -51,7 +47,7 @@ OUTPUT_FILE <- "01_General_Trend_Report_12PM.docx"
 OUTPUT_DIR  <- file.path(PKG_ROOT, "output")
 
 qmd_src   <- file.path(PKG_ROOT, "inst/templates/01_General_Trend_Report.qmd")
-qmd_local <- file.path(RENDER_DIR, "01_General_Trend_Report.qmd")
+qmd_local <- file.path(OUTPUT_DIR, "01_General_Trend_Report.qmd")
 
 file.copy(qmd_src, qmd_local, overwrite = TRUE)
 
@@ -62,13 +58,12 @@ quarto::quarto_render(
   execute_params = list(
     pkg_path     = PKG_ROOT,
     spec_file    = SPEC_FILE,
-    results_file = results_file_tmp,
+    results_file = results_file,
     min_n        = 10L
   )
 )
 
-file.copy(file.path(RENDER_DIR, OUTPUT_FILE),
-          file.path(OUTPUT_DIR, OUTPUT_FILE), overwrite = TRUE)
+file.remove(qmd_local)
 message("Done! Report written to: ", file.path(OUTPUT_DIR, OUTPUT_FILE))
 
 

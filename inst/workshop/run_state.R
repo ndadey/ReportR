@@ -23,10 +23,9 @@ devtools::load_all(PKG_ROOT)
 source(file.path(PKG_ROOT, "states/_config.R"))
 
 # -----------------------------------------------------------------------------
-# Private helper: copy QMD to tempdir, render, copy output back.
-# Follows the Dropbox-safe pattern required by this project.
+# Private helper: copy QMD to output_dir, render there, remove QMD after.
 # -----------------------------------------------------------------------------
-.render_report <- function(qmd_name, rds_tmp, output_dir, render_dir,
+.render_report <- function(qmd_name, rds_path, output_dir,
                             pkg_path, spec_file, min_n) {
   qmd_src <- system.file("templates", qmd_name, package = "ReportR")
   if (!nzchar(qmd_src)) {
@@ -38,7 +37,7 @@ source(file.path(PKG_ROOT, "states/_config.R"))
   }
 
   out_file  <- sub("\\.qmd$", ".docx", qmd_name)
-  qmd_local <- file.path(render_dir, qmd_name)
+  qmd_local <- file.path(output_dir, qmd_name)
   file.copy(qmd_src, qmd_local, overwrite = TRUE)
 
   quarto::quarto_render(
@@ -48,13 +47,12 @@ source(file.path(PKG_ROOT, "states/_config.R"))
     execute_params = list(
       pkg_path     = pkg_path,
       spec_file    = spec_file,
-      results_file = rds_tmp,
+      results_file = rds_path,
       min_n        = min_n
     )
   )
 
-  file.copy(file.path(render_dir, out_file),
-            file.path(output_dir, out_file), overwrite = TRUE)
+  file.remove(qmd_local)
   message("  Report: ", file.path(output_dir, out_file))
   invisible(NULL)
 }
@@ -80,11 +78,9 @@ run_state <- function(state_code,
   # 2. Load and munge data (produces student_results_long)
   source(cfg$setup, local = TRUE)
 
-  # 3. Prepare output directories
+  # 3. Prepare output directory
   output_dir <- cfg$output
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-  render_dir <- file.path(tempdir(), paste0("ReportR_", state_code))
-  dir.create(render_dir, showWarnings = FALSE)
 
   results <- list()
 
@@ -94,11 +90,10 @@ run_state <- function(state_code,
     results$trend <- run_general_trend_analysis(
       student_results_long, assessment_spec, min_n = min_n
     )
-    rds_tmp <- file.path(render_dir, "general_trend_results.rds")
-    saveRDS(results$trend, rds_tmp)
-    file.copy(rds_tmp, file.path(output_dir, "general_trend_results.rds"), overwrite = TRUE)
-    if (render) .render_report("01_General_Trend_Report.qmd", rds_tmp, output_dir,
-                                render_dir, pkg_path, cfg$spec, min_n)
+    rds_path <- file.path(output_dir, "general_trend_results.rds")
+    saveRDS(results$trend, rds_path)
+    if (render) .render_report("01_General_Trend_Report.qmd", rds_path, output_dir,
+                                pkg_path, cfg$spec, min_n)
   }
 
   # ---- Line 1.2: Enrollment -------------------------------------------------
@@ -107,11 +102,10 @@ run_state <- function(state_code,
     results$enrollment <- run_general_enrollment_analysis(
       student_results_long, assessment_spec, min_n = min_n
     )
-    rds_tmp <- file.path(render_dir, "enrollment_results.rds")
-    saveRDS(results$enrollment, rds_tmp)
-    file.copy(rds_tmp, file.path(output_dir, "enrollment_results.rds"), overwrite = TRUE)
-    if (render) .render_report("01_Enrollment_Trends_Report.qmd", rds_tmp, output_dir,
-                                render_dir, pkg_path, cfg$spec, min_n)
+    rds_path <- file.path(output_dir, "enrollment_results.rds")
+    saveRDS(results$enrollment, rds_path)
+    if (render) .render_report("01_Enrollment_Trends_Report.qmd", rds_path, output_dir,
+                                pkg_path, cfg$spec, min_n)
   }
 
   # ---- Line 1.3: Cohort -----------------------------------------------------
@@ -132,11 +126,10 @@ run_state <- function(state_code,
     results$anomaly <- run_anomaly_analysis(
       student_results_long, assessment_spec, min_n = min_n
     )
-    rds_tmp <- file.path(render_dir, "anomaly_results.rds")
-    saveRDS(results$anomaly, rds_tmp)
-    file.copy(rds_tmp, file.path(output_dir, "anomaly_results.rds"), overwrite = TRUE)
-    if (render) .render_report("04_Anomaly_Report.qmd", rds_tmp, output_dir,
-                                render_dir, pkg_path, cfg$spec, min_n)
+    rds_path <- file.path(output_dir, "anomaly_results.rds")
+    saveRDS(results$anomaly, rds_path)
+    if (render) .render_report("04_Anomaly_Report.qmd", rds_path, output_dir,
+                                pkg_path, cfg$spec, min_n)
   }
 
   # ---- Line 5: Aggregate ----------------------------------------------------
@@ -145,11 +138,10 @@ run_state <- function(state_code,
     results$aggregate <- run_aggregate_analysis(
       student_results_long, assessment_spec, min_n_school = min_n
     )
-    rds_tmp <- file.path(render_dir, "aggregate_results.rds")
-    saveRDS(results$aggregate, rds_tmp)
-    file.copy(rds_tmp, file.path(output_dir, "aggregate_results.rds"), overwrite = TRUE)
-    if (render) .render_report("05_Aggregate_Analysis_Report.qmd", rds_tmp, output_dir,
-                                render_dir, pkg_path, cfg$spec, min_n)
+    rds_path <- file.path(output_dir, "aggregate_results.rds")
+    saveRDS(results$aggregate, rds_path)
+    if (render) .render_report("05_Aggregate_Analysis_Report.qmd", rds_path, output_dir,
+                                pkg_path, cfg$spec, min_n)
   }
 
   message("[", state_code, "] Complete. Outputs: ", output_dir)
