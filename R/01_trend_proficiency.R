@@ -114,8 +114,14 @@ plot_proficiency <- function(proficiency_table, assessment_spec) {
     )
 
   # ---- Trend line ----
+  dat_trend <- dat |> dplyr::filter(!is.na(.data[["pct_proficient"]]))
+
+  if (nrow(dat_trend) == 0) {
+    return(list(trend = NULL, heatmap = NULL))
+  }
+
   p_trend <- ggplot2::ggplot(
-    dat |> dplyr::filter(!is.na(.data[["pct_proficient"]])),
+    dat_trend,
     ggplot2::aes(x = YEAR_chr, y = pct_proficient,
                  group = grade_lbl, color = grade_lbl)
   ) +

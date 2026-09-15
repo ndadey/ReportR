@@ -19,6 +19,7 @@ params:
   spec_file:    null
   results_file: null
   min_n:        10
+  report_years: null
 ---
 
 ```{r setup}
@@ -43,6 +44,8 @@ if (!is.null(spec_path)) source(spec_path)
 
 aggregate_results <- readRDS(params$results_file)
 min_n             <- params$min_n
+report_years       <- params$report_years
+report_years_label <- if (is.null(report_years)) "all years" else paste(range(report_years), collapse = "–")
 
 # Detect subject column name used in results
 subj_col <- intersect(c("SUBJECT", "CONTENT_AREA"),
@@ -83,6 +86,9 @@ Schools are classified as **improving**, **stable**, or **declining** based on y
 
 ```{r tbl-improvement, tab.cap="School Improvement Classification by Year and Subject"}
 imp <- aggregate_results$performance_trends$improvement_classification
+if (!is.null(report_years) && !is.null(imp)) {
+  imp <- imp |> dplyr::filter(.data[["YEAR"]] %in% report_years)
+}
 
 if (!is.null(imp) && nrow(imp) > 0) {
   tbl <- imp |>
@@ -181,6 +187,9 @@ if (!is.null(corr) && nrow(corr) > 0) {
 
 ```{r tbl-demo-composition, tab.cap="Mean School Demographic Composition by Year (% of students)"}
 demo <- aggregate_results$population_shifts$school_demographic_composition
+if (!is.null(report_years) && !is.null(demo)) {
+  demo <- demo |> dplyr::filter(.data[["YEAR"]] %in% report_years)
+}
 
 if (!is.null(demo) && nrow(demo) > 0) {
   yr_order  <- sort(unique(demo$YEAR))
@@ -473,6 +482,9 @@ if (nrow(icc_plot) > 0) {
 
 ```{r tbl-district-summary, tab.cap="District Proficiency Summary (Most Recent Year)"}
 dist_tbl <- aggregate_results$performance_trends$district_level_summary
+if (!is.null(report_years) && !is.null(dist_tbl)) {
+  dist_tbl <- dist_tbl |> dplyr::filter(.data[["YEAR"]] %in% report_years)
+}
 
 if (!is.null(dist_tbl) && nrow(dist_tbl) > 0) {
   most_recent <- max(dist_tbl$YEAR, na.rm = TRUE)
@@ -511,3 +523,22 @@ The following sections are planned but require `school_results_long`, which is n
 - **5.7 Intervention Analysis** — requires `HQIM_FLAG` and `LITERACY_COACH_FLAG` for propensity-matched comparisons
 
 When `school_results_long` is available, rerun `run_aggregate_analysis()` with `school_results_long` provided and re-render this report.
+
+------------------------------------------------------------------------
+
+# Appendix: Historical Data (All Years)
+
+```{r appendix-note, results='asis'}
+if (!is.null(report_years)) {
+  all_years  <- sort(unique(aggregate_results$performance_trends$improvement_classification$YEAR))
+  hist_years <- setdiff(all_years, report_years)
+  if (length(hist_years) > 0) {
+    cat("*Main report sections above show data for", report_years_label, "only.",
+        "Full data for all available years is exported to Excel.*\n\n")
+  } else {
+    cat("*No historical years outside the report window.*\n\n")
+  }
+} else {
+  cat("*All available years are shown in the main body.*\n\n")
+}
+```

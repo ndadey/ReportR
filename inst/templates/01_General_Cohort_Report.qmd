@@ -21,6 +21,7 @@ params:
   spec_file:    null
   results_file: null
   min_n:        10
+  report_years: null
 ---
 
 ```{r setup}
@@ -52,6 +53,8 @@ if (!is.null(spec_path) && file.exists(spec_path)) {
 cohort_results <- readRDS(params$results_file)
 min_n          <- params$min_n
 anchor_grade   <- assessment_spec$years$cohort_anchor_grade
+report_years       <- params$report_years
+report_years_label <- if (is.null(report_years)) "all years" else paste(range(report_years), collapse = "–")
 ```
 
 ## Introduction
@@ -81,6 +84,9 @@ cat(cohort_results$text$narrative)
 tbl <- cohort_results$summary |>
   dplyr::select(SUBJECT, COHORT_YEAR, GRADE, YEAR, N) |>
   dplyr::arrange(SUBJECT, COHORT_YEAR, GRADE)
+if (!is.null(report_years)) {
+  tbl <- tbl |> dplyr::filter(.data[["YEAR"]] %in% report_years)
+}
 
 flextable::flextable(tbl) |>
   flextable::bold(part = "header") |>
@@ -188,6 +194,9 @@ summary_tbl <- cohort_results$summary |>
     SD_SCORE       = round(SD_SCORE, 2),
     PCT_PROFICIENT = round(PCT_PROFICIENT, 1)
   )
+if (!is.null(report_years)) {
+  summary_tbl <- summary_tbl |> dplyr::filter(.data[["YEAR"]] %in% report_years)
+}
 
 flextable::flextable(summary_tbl) |>
   flextable::bold(part = "header") |>
@@ -299,6 +308,9 @@ later grades) in ways that would bias cross-sectional comparisons.
 
 ```{r cohort-vs-xs-table}
 xs <- cohort_results$crosssectional$crosssectional
+if (!is.null(report_years) && !is.null(xs)) {
+  xs <- xs |> dplyr::filter(.data[["YEAR"]] %in% report_years)
+}
 if (!is.null(xs) && nrow(xs) > 0) {
   flextable::flextable(
     xs |> dplyr::mutate(
@@ -353,4 +365,23 @@ flextable::flextable(cohort_results$summary) |>
   flextable::fontsize(size = 8, part = "all") |>
   flextable::merge_v(j = c("SUBJECT", "COHORT_YEAR")) |>
   flextable::set_table_properties(layout = "autofit", width = 1)
+```
+
+------------------------------------------------------------------------
+
+# Appendix: Historical Data (All Years)
+
+```{r appendix-note, results='asis'}
+if (!is.null(report_years)) {
+  all_years  <- sort(unique(cohort_results$summary$YEAR))
+  hist_years <- setdiff(all_years, report_years)
+  if (length(hist_years) > 0) {
+    cat("*Main report sections above show data for", report_years_label, "only.",
+        "Full data for all available years is exported to Excel.*\n\n")
+  } else {
+    cat("*No historical years outside the report window.*\n\n")
+  }
+} else {
+  cat("*All available years are shown in the main body.*\n\n")
+}
 ```

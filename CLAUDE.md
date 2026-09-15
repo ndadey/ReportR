@@ -238,6 +238,16 @@ assessment_spec <- list(
 - **Scale score structure is NESTED** — `scale_scores$ELA$`3`` for span-tested,
   `scale_scores$ENG_II` for EOC. The OLD flat structure (`ELA_3 = list(...)`) is no
   longer used. Any code that builds keys like `paste(subj, grade, sep="_")` is wrong.
+- **EOC subjects match on SUBJECT alone.** Subjects declared `grades = NULL` have a
+  single ungraded `scale_scores` entry, but state data routinely reports a real tested
+  grade on EOC records (MS Algebra I spans grades 7–12). **Never** join a spec lookup to
+  data on `SUBJECT` + `GRADE` directly — every EOC row misses and silently gets
+  `LOSS`/`HOSS` = `NA`. Use `join_score_bounds(data, assessment_spec, cuts = )` in
+  `spec_helpers.R`, which joins span-tested subjects on `SUBJECT` + `GRADE`, EOC subjects
+  on `SUBJECT`, and warns naming any cell the spec does not cover. For a single row,
+  `get_score_spec()` applies the same rule and ignores `grade` for EOC subjects.
+  `build_loss_hoss_lookup()` still emits `GRADE = NA` for EOC — it is the raw table
+  behind `join_score_bounds()`, not something to join directly.
 - **Level derivation**: level index = `sum(score > cuts) + 1`; label =
   `achievement_levels$labels[index]`
 - **Number of levels**: always `length(achievement_levels$labels)` — never hardcode 4 or 5.
@@ -947,3 +957,9 @@ test_data <- do.call(rbind, lapply(c("ELA", "MATHEMATICS"), function(s) {
 20. Line 5 (aggregate) is also standalone. Sub-analyses requiring `school_results_long`
     are set to `NULL` with explanatory comments — do not implement them until the user
     confirms that data source is available. See Section 8d for the full list.
+21. **Never join a spec lookup on `SUBJECT` + `GRADE`.** EOC subjects (`grades = NULL`)
+    have one ungraded `scale_scores` entry, but real state data reports a tested grade on
+    EOC records — MS Algebra I spans grades 7–12 — so such a join misses every EOC row
+    and leaves `LOSS`/`HOSS` as `NA`, which silently disables the out-of-range, level-
+    mismatch, and flat-distribution checks and crashes `stats::density(from = NA)`.
+    Use `join_score_bounds()` (or `get_score_spec()` for one row). See Section 5.

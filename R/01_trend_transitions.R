@@ -58,7 +58,10 @@ compute_transitions <- function(student_results_long,
 
   yrs <- sort(unique(base[["YEAR"]]))
   if (length(yrs) < 2L) {
-    message("Achievement transitions require at least two years of data.")
+    n_yrs_total <- dplyr::n_distinct(student_results_long[["YEAR"]])
+    message("Achievement transitions require at least two years of data with ",
+            "non-NA STUDENT_ID. Only ", length(yrs), " of ", n_yrs_total,
+            " year(s) have matched student records after removing missing IDs.")
     return(list(long_table = NULL, summary_table = NULL, avg_matrices = NULL))
   }
 
@@ -122,7 +125,7 @@ compute_transitions <- function(student_results_long,
     dplyr::ungroup()
 
   # Summary: total and net rates per cell
-  summary_table <- long_table |>
+  summary_piv <- long_table |>
     dplyr::mutate(
       move_dir = dplyr::case_when(
         as.integer(.data[["from_level"]]) == as.integer(.data[["to_level"]]) ~ "stable",
@@ -135,7 +138,15 @@ compute_transitions <- function(student_results_long,
                     .data[["n_total"]], .data[["move_dir"]]) |>
     dplyr::summarize(pct = sum(.data[["prop"]], na.rm = TRUE), .groups = "drop") |>
     tidyr::pivot_wider(names_from  = "move_dir", values_from = "pct",
-                       values_fill = 0) |>
+                       values_fill = 0)
+
+  # Guarantee all three direction columns exist even when no transitions of that
+  # type were observed (pivot_wider only creates columns for values present in data)
+  for (.dir in c("stable", "up", "down")) {
+    if (!.dir %in% names(summary_piv)) summary_piv[[.dir]] <- 0
+  }
+
+  summary_table <- summary_piv |>
     dplyr::mutate(
       total_transition_rate = 1 - dplyr::coalesce(.data[["stable"]], 0),
       net_upward_rate       = dplyr::coalesce(.data[["up"]], 0) -

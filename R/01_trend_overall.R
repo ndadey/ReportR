@@ -302,12 +302,32 @@ plot_score_trends <- function(score_summary, assessment_spec) {
 
   # Per-grade LOSS/HOSS bounds — used to anchor each facet's y-axis
   lh_lookup <- build_loss_hoss_lookup(assessment_spec)
+  eoc_subj  <- .eoc_subjects(assessment_spec)
 
   # Build a geom_blank data frame for one subject so each grade facet is
-  # anchored to its own LOSS/HOSS range.
-  make_bounds_df <- function(subj, grade_lbl_levels, year_val) {
+  # anchored to its own LOSS/HOSS range. `observed_lbls` are the grade labels
+  # this subject actually has data for — geom_blank rows outside that set would
+  # create empty facet panels, since facet_wrap() panels follow every layer.
+  make_bounds_df <- function(subj, grade_lbl_levels, year_val, observed_lbls) {
     lh_s <- lh_lookup[lh_lookup[["SUBJECT"]] == subj, ]
     if (nrow(lh_s) == 0) return(NULL)
+
+    # EOC subjects have a single ungraded LOSS/HOSS pair in the spec, but their
+    # records may carry any tested grade. Anchor every facet the data produced
+    # to that one pair rather than emitting an unmatchable "Grade NA" row.
+    if (subj %in% eoc_subj) {
+      lbls <- intersect(grade_lbl_levels, observed_lbls)
+      if (length(lbls) == 0L) return(NULL)
+      return(do.call(rbind, lapply(lbls, function(glbl) {
+        data.frame(
+          grade_lbl = factor(glbl, levels = grade_lbl_levels),
+          bound     = c(lh_s[["LOSS"]][1L], lh_s[["HOSS"]][1L]),
+          YEAR_chr  = year_val,
+          stringsAsFactors = FALSE
+        )
+      })))
+    }
+
     rows <- lapply(seq_len(nrow(lh_s)), function(i) {
       g    <- lh_s[["GRADE"]][i]
       glbl <- if (is.na(g)) "Grade NA" else paste0("Grade ", g)
@@ -329,7 +349,8 @@ plot_score_trends <- function(score_summary, assessment_spec) {
     if (nrow(d) == 0) return(NULL)
     lbl     <- unique(d[["subj_label"]])[1]
     yr_val  <- unique(d[["YEAR_chr"]])[1]
-    bounds  <- make_bounds_df(s, levels(d[["grade_lbl"]]), yr_val)
+    bounds  <- make_bounds_df(s, levels(d[["grade_lbl"]]), yr_val,
+                              unique(as.character(d[["grade_lbl"]])))
     p <- ggplot2::ggplot(d, ggplot2::aes(x = YEAR_chr, y = value, group = 1)) +
       ggplot2::geom_line() +
       ggplot2::geom_point() +
@@ -361,7 +382,8 @@ plot_score_trends <- function(score_summary, assessment_spec) {
     if (nrow(d) == 0) return(NULL)
     lbl    <- unique(d[["subj_label"]])[1]
     yr_val <- unique(d[["YEAR_chr"]])[1]
-    bounds <- make_bounds_df(s, levels(d[["grade_lbl"]]), yr_val)
+    bounds <- make_bounds_df(s, levels(d[["grade_lbl"]]), yr_val,
+                             unique(as.character(d[["grade_lbl"]])))
     p <- ggplot2::ggplot(d, ggplot2::aes(x = YEAR_chr, y = mean_val, group = 1)) +
       ggplot2::geom_ribbon(ggplot2::aes(ymin = lower, ymax = upper),
                            alpha = 0.15, fill = "steelblue", color = NA) +

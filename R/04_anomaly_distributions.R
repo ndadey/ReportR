@@ -71,9 +71,6 @@ compute_distributions <- function(student_results_long,
     is.list(assessment_spec)
   )
 
-  # Build LOSS/HOSS lookup to determine score range per cell
-  lh_lookup <- build_loss_hoss_lookup(assessment_spec)
-
   # Compute shape statistics per YEAR x SUBJECT x GRADE
   stats_tbl <- student_results_long |>
     dplyr::filter(!is.na(.data[["SCALE_SCORE"]])) |>
@@ -107,9 +104,9 @@ compute_distributions <- function(student_results_long,
   small <- stats_tbl[["n"]] < min_n
   stats_tbl[small, shape_cols] <- NA_real_
 
-  # Join LOSS/HOSS for flatness threshold
-  stats_tbl <- stats_tbl |>
-    dplyr::left_join(lh_lookup, by = c("SUBJECT", "GRADE"))
+  # Join LOSS/HOSS for flatness threshold (EOC subjects match on SUBJECT alone)
+  stats_tbl <- join_score_bounds(stats_tbl, assessment_spec,
+                                 warn_unmatched = FALSE)
 
   # Apply flags (Bimodal > Skewed > Flat in priority)
   stats_tbl <- stats_tbl |>
@@ -328,8 +325,6 @@ plot_distributions <- function(distribution_table,
   density_list <- list()
 
   if (nrow(flagged) > 0) {
-    lh_lookup <- build_loss_hoss_lookup(assessment_spec)
-
     # Keep only needed columns to avoid large objects in loop scope
     base_scores <- student_results_long[
       !is.na(student_results_long[["SCALE_SCORE"]]),
@@ -351,13 +346,12 @@ plot_distributions <- function(distribution_table,
 
       if (length(scores) < 2L) next
 
-      lh_row <- lh_lookup[
-        lh_lookup[["SUBJECT"]] == subj &
-        (if (is.na(grade)) is.na(lh_lookup[["GRADE"]])
-         else !is.na(lh_lookup[["GRADE"]]) & lh_lookup[["GRADE"]] == grade), ]
-
-      loss_val <- if (nrow(lh_row) > 0L) lh_row[["LOSS"]][1L] else NA_real_
-      hoss_val <- if (nrow(lh_row) > 0L) lh_row[["HOSS"]][1L] else NA_real_
+      # get_score_spec() resolves EOC subjects on SUBJECT alone, so an EOC
+      # record carrying a real tested grade still finds its bounds.
+      ss       <- get_score_spec(assessment_spec, subj,
+                                 if (is.na(grade)) NULL else grade)
+      loss_val <- if (!is.null(ss)) ss$loss else NA_real_
+      hoss_val <- if (!is.null(ss)) ss$hoss else NA_real_
 
       dens     <- stats::density(scores, n = 512L)
       dens_dat <- data.frame(x = dens$x, y = dens$y)
@@ -368,10 +362,11 @@ plot_distributions <- function(distribution_table,
       if (is.null(subj_lbl)) subj_lbl <- subj
 
       p <- ggplot2::ggplot(
-        cell_data,
-        ggplot2::aes(x = .data[["SCALE_SCORE"]])
+        dens_dat,
+        ggplot2::aes(x = .data[["x"]], y = .data[["y"]])
       ) +
-        ggplot2::geom_density(fill = "#cfe2f3", color = "#3c78d8", alpha = 0.7) +
+        ggplot2::geom_area(fill = "#cfe2f3", alpha = 0.7) +
+        ggplot2::geom_line(color = "#3c78d8", linewidth = 0.8) +
         ggplot2::labs(
           title    = paste0(subj_lbl, " ", grade_lbl, " (", yr, ")"),
           subtitle = paste0("Flag: ", flag, " \u2014 ", rsn),
@@ -379,23 +374,23 @@ plot_distributions <- function(distribution_table,
         ) +
         ggplot2::theme_minimal(base_size = 11)
 
-      if (nrow(lh) > 0) {
+      if (!is.na(loss_val) && !is.na(hoss_val)) {
         p <- p +
           ggplot2::geom_vline(
-            xintercept = lh$LOSS[1], linetype = "dashed",
+            xintercept = loss_val, linetype = "dashed",
             color = "#cc0000", linewidth = 0.7
           ) +
           ggplot2::geom_vline(
-            xintercept = lh$HOSS[1], linetype = "dashed",
+            xintercept = hoss_val, linetype = "dashed",
             color = "#cc0000", linewidth = 0.7
           ) +
           ggplot2::annotate(
-            "text", x = lh$LOSS[1], y = Inf,
+            "text", x = loss_val, y = Inf,
             label = "LOSS", vjust = 1.5, hjust = -0.1,
             size = 3, color = "#cc0000"
           ) +
           ggplot2::annotate(
-            "text", x = lh$HOSS[1], y = Inf,
+            "text", x = hoss_val, y = Inf,
             label = "HOSS", vjust = 1.5, hjust = 1.1,
             size = 3, color = "#cc0000"
           )

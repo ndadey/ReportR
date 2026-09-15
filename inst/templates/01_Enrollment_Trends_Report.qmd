@@ -19,6 +19,7 @@ params:
   spec_file:    null
   results_file: null
   min_n:        10
+  report_years: null
 ---
 
 ```{r setup}
@@ -43,6 +44,8 @@ if (!is.null(spec_path)) source(spec_path)
 
 enrollment_results <- readRDS(params$results_file)
 min_n              <- params$min_n
+report_years       <- params$report_years
+report_years_label <- if (is.null(report_years)) "all years" else paste(range(report_years), collapse = "–")
 
 # Subject label lookup — used throughout for readable column/row labels
 subj_lookup <- data.frame(
@@ -78,6 +81,9 @@ cat(enrollment_results$text$narrative, "\n")
 
 ```{r tbl-overall, tab.cap="Total Unique Students by Year"}
 by_year <- enrollment_results$counts$by_year
+if (!is.null(report_years)) {
+  by_year <- by_year |> dplyr::filter(.data[["YEAR"]] %in% report_years)
+}
 
 if (!is.null(by_year) && nrow(by_year) > 0) {
   yr_order  <- sort(unique(by_year$YEAR))
@@ -107,6 +113,9 @@ if (!is.null(by_year) && nrow(by_year) > 0) {
 
 ```{r tbl-by-grade, tab.cap="Enrollment by Year and Grade"}
 by_grade <- enrollment_results$counts$by_year_grade
+if (!is.null(report_years)) {
+  by_grade <- by_grade |> dplyr::filter(.data[["YEAR"]] %in% report_years)
+}
 
 if (!is.null(by_grade) && nrow(by_grade) > 0) {
   yr_order  <- sort(unique(by_grade$YEAR))
@@ -136,6 +145,9 @@ if (!is.null(by_grade) && nrow(by_grade) > 0) {
 
 ```{r tbl-by-subject, tab.cap="Enrollment by Year and Subject"}
 by_subj <- enrollment_results$counts$by_year_subject
+if (!is.null(report_years)) {
+  by_subj <- by_subj |> dplyr::filter(.data[["YEAR"]] %in% report_years)
+}
 
 if (!is.null(by_subj) && nrow(by_subj) > 0) {
   yr_order  <- sort(unique(by_subj$YEAR))
@@ -172,6 +184,9 @@ The tables in this section show how the demographic composition of the tested po
 
 ```{r tbl-subgroup-props, tab.cap="Subgroup Composition by Year: N, %, and Year-over-Year Changes"}
 by_sg <- enrollment_results$proportions$by_subgroup
+if (!is.null(report_years)) {
+  by_sg <- by_sg |> dplyr::filter(.data[["YEAR"]] %in% report_years)
+}
 
 if (!is.null(by_sg) && nrow(by_sg) > 0) {
   yr_order <- sort(unique(by_sg$YEAR))
@@ -240,6 +255,9 @@ all_smry <- do.call(rbind, lapply(names(transitions), function(sg) {
 if (is.null(all_smry) || nrow(all_smry) == 0) {
   cat("*No transition data available.*\n")
 } else {
+  if (!is.null(report_years)) {
+    all_smry <- all_smry |> dplyr::filter(.data[["YEAR"]] %in% report_years)
+  }
   # Build readable year-pair labels (e.g. "2023-24")
   all_smry <- all_smry |>
     dplyr::mutate(
@@ -491,6 +509,9 @@ exiting    <- enrollment_results$entry_exit$exiting
 continuing <- enrollment_results$entry_exit$continuing
 
 both <- dplyr::bind_rows(entering, exiting, continuing)
+if (!is.null(report_years)) {
+  both <- both |> dplyr::filter(.data[["YEAR"]] %in% report_years)
+}
 
 if (!is.null(both) && nrow(both) > 0) {
   yr_order  <- sort(unique(both$YEAR))
@@ -524,5 +545,24 @@ if (!is.null(both) && nrow(both) > 0) {
   )
 } else {
   cat("*Entry/exit tracking requires `STUDENT_ID` — not available for this dataset.*\n")
+}
+```
+
+------------------------------------------------------------------------
+
+# Appendix: Historical Data (All Years)
+
+```{r appendix-note, results='asis'}
+if (!is.null(report_years)) {
+  all_years  <- sort(unique(enrollment_results$counts$by_year$YEAR))
+  hist_years <- setdiff(all_years, report_years)
+  if (length(hist_years) > 0) {
+    cat("*Main report sections above show data for", report_years_label, "only.",
+        "Full data for all available years is exported to Excel.*\n\n")
+  } else {
+    cat("*No historical years outside the report window.*\n\n")
+  }
+} else {
+  cat("*All available years are shown in the main body.*\n\n")
 }
 ```

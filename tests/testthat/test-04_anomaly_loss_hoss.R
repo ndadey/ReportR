@@ -31,11 +31,16 @@ make_test_spec <- function() {
       labels           = c("Basic", "Proficient", "Advanced"),
       policy_benchmark = "Proficient"
     ),
+    # Nested structure: scale_scores$SUBJECT$GRADE (see CLAUDE.md section 5).
     scale_scores = list(
-      ELA_3  = list(loss = 300, hoss = 399, cuts = c(340, 370)),
-      ELA_4  = list(loss = 400, hoss = 499, cuts = c(440, 470)),
-      MATH_3 = list(loss = 300, hoss = 399, cuts = c(338, 368)),
-      MATH_4 = list(loss = 400, hoss = 499, cuts = c(435, 465))
+      ELA = list(
+        `3` = list(loss = 300, hoss = 399, cuts = c(340, 370)),
+        `4` = list(loss = 400, hoss = 499, cuts = c(440, 470))
+      ),
+      MATH = list(
+        `3` = list(loss = 300, hoss = 399, cuts = c(338, 368)),
+        `4` = list(loss = 400, hoss = 499, cuts = c(435, 465))
+      )
     ),
     years = list(tested_years = 2023:2024, cohort_anchor_grade = 3),
     demographics = list()
@@ -142,4 +147,70 @@ test_that("run_loss_hoss plot elements are ggplot objects", {
     expect_true(inherits(sub[[nm]], "ggplot"),
                 label = paste("element", nm, "should be ggplot"))
   }
+})
+
+# ---------------------------------------------------------------------------
+# EOC handling — subjects declared grades = NULL whose records carry a real
+# tested grade (Mississippi reports Algebra I in grades 7 through 12).
+# ---------------------------------------------------------------------------
+
+make_eoc_spec <- function() {
+  spec <- make_test_spec()
+  spec$subjects$ALG_I     <- list(label = "Algebra I", grades = NULL)
+  spec$scale_scores$ALG_I <- list(loss = 1001, hoss = 1099, cuts = c(1038, 1064))
+  spec
+}
+
+make_eoc_data <- function(n = 60, years = 2023:2024, grades = 9:10) {
+  nr <- n * length(years) * length(grades)
+  set.seed(7)
+  data.frame(
+    STUDENT_ID        = paste0("E", seq_len(nr)),
+    YEAR              = rep(years, each = n * length(grades)),
+    GRADE             = rep(rep(grades, each = n), times = length(years)),
+    SUBJECT           = "ALG_I",
+    SCALE_SCORE       = stats::rnorm(nr, mean = 1050, sd = 15),
+    ACHIEVEMENT_LEVEL = "Proficient",
+    SCHOOL_ID         = "SCH001",
+    DISTRICT_ID       = "DIST01",
+    stringsAsFactors  = FALSE
+  )
+}
+
+test_that("compute_loss_hoss_table resolves bounds for EOC rows with real grades", {
+  tbl <- compute_loss_hoss_table(make_eoc_data(), make_eoc_spec())
+  eoc <- tbl[tbl[["SUBJECT"]] == "ALG_I", ]
+  expect_gt(nrow(eoc), 0L)
+  expect_false(any(is.na(eoc[["LOSS"]])))
+  expect_true(all(eoc[["LOSS"]] == 1001))
+  expect_true(all(eoc[["HOSS"]] == 1099))
+})
+
+test_that("compute_loss_hoss_table warns about cells the spec does not cover", {
+  d <- rbind(
+    make_test_data(n = 20),
+    transform(make_test_data(n = 20, grades = 9L), SUBJECT = "MATH")
+  )
+  expect_warning(compute_loss_hoss_table(d, make_test_spec()), "MATH/9")
+})
+
+test_that("plot_loss_hoss_distributions builds a plot per EOC grade", {
+  d     <- make_eoc_data()
+  spec  <- make_eoc_spec()
+  tbl   <- compute_loss_hoss_table(d, spec)
+  plots <- plot_loss_hoss_distributions(d, spec, tbl)
+  expect_true(all(c("ALG_I_Grade9", "ALG_I_Grade10") %in% names(plots)))
+  expect_true(inherits(plots[["ALG_I_Grade9"]], "ggplot"))
+})
+
+test_that("plot_loss_hoss_distributions survives a cell with no spec entry", {
+  # Regression for: density.default(..., from = x_lo) -> non-finite 'from'.
+  # An unmapped cell must fall back to its observed range, never error.
+  d    <- transform(make_test_data(n = 30), SUBJECT = "SCIENCE")
+  spec <- make_test_spec()
+  tbl  <- suppressWarnings(compute_loss_hoss_table(d, spec))
+  expect_true(all(is.na(tbl[["LOSS"]])))
+  expect_no_error(plots <- plot_loss_hoss_distributions(d, spec, tbl))
+  expect_true(all(vapply(plots, function(p) is.null(p) || inherits(p, "ggplot"),
+                         logical(1))))
 })

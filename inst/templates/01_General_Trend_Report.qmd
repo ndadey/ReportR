@@ -19,6 +19,7 @@ params:
   spec_file:    null
   results_file: null
   min_n:        10
+  report_years: null
 ---
 
 ```{r setup}
@@ -49,6 +50,11 @@ source(spec_path)
 # Load pre-computed results from RDS.
 general_trend_results <- readRDS(params$results_file)
 min_n <- general_trend_results$params$min_n
+
+# report_years controls which years appear in main-body tables.
+# NULL means show all years (no filtering).
+report_years       <- params$report_years
+report_years_label <- if (is.null(report_years)) "all years" else paste(range(report_years), collapse = "–")
 ```
 
 ## Introduction
@@ -70,11 +76,17 @@ cat(general_trend_results$score_trends$text$narrative)
 ```
 
 ```{r tbl-score-trends, tab.cap="Mean Scale Scores and Standard Deviations by Year, Subject, and Grade"}
-tbl <- general_trend_results$score_trends$table
+tbl      <- general_trend_results$score_trends$table   # kept full for diff computation below
+tbl_disp <- tbl
+if (!is.null(report_years)) {
+  yr_pat   <- paste(as.character(report_years), collapse = "|")
+  keep     <- c("SUBJECT", "GRADE", grep(yr_pat, names(tbl), value = TRUE))
+  tbl_disp <- tbl[, keep]
+}
 
-mean_sd_cols <- grep("_(Mean|SD)$", names(tbl), value = TRUE)
+mean_sd_cols <- grep("_(Mean|SD)$", names(tbl_disp), value = TRUE)
 
-flextable::flextable(tbl) |>
+flextable::flextable(tbl_disp) |>
   flextable::bold(part = "header") |>
   flextable::fontsize(size = 9, part = "all") |>
   flextable::colformat_double(j = mean_sd_cols, digits = 2) |>
@@ -82,29 +94,35 @@ flextable::flextable(tbl) |>
 ```
 
 ```{r tbl-score-changes, tab.cap="Year-to-Year Changes in Mean Scale Scores, Standard Deviations, and N by Subject and Grade"}
-yrs   <- sort(as.integer(sub("_Mean$", "", grep("_Mean$", names(tbl), value = TRUE))))
-y1s   <- yrs[-length(yrs)]
-y2s   <- yrs[-1]
-pairs <- paste0(y1s, "→", y2s)
+tbl_df <- as.data.frame(tbl)  # base R data frame avoids tibble [[<- compatibility errors
+yrs    <- sort(as.integer(sub("_Mean$", "", grep("_Mean$", names(tbl_df), value = TRUE))))
+if (!is.null(report_years)) yrs <- yrs[yrs %in% as.integer(unlist(report_years))]
+y1s    <- head(yrs, -1L)
+y2s    <- tail(yrs, -1L)
+pairs  <- paste0(y1s, "→", y2s)
 
-diff_tbl <- tbl[, c("SUBJECT", "GRADE")]
-for (i in seq_along(pairs))
-  diff_tbl[[paste0(pairs[i], "_ΔMean")]] <-
-    round(tbl[[paste0(y2s[i], "_Mean")]] - tbl[[paste0(y1s[i], "_Mean")]], 2)
-for (i in seq_along(pairs))
-  diff_tbl[[paste0(pairs[i], "_ΔSD")]] <-
-    round(tbl[[paste0(y2s[i], "_SD")]] - tbl[[paste0(y1s[i], "_SD")]], 2)
-for (i in seq_along(pairs))
-  diff_tbl[[paste0(pairs[i], "_ΔN")]] <-
-    tbl[[paste0(y2s[i], "_N")]] - tbl[[paste0(y1s[i], "_N")]]
+diff_tbl <- tbl_df[, c("SUBJECT", "GRADE"), drop = FALSE]
+for (i in seq_along(pairs)) {
+  c_m2 <- paste0(y2s[i], "_Mean"); c_m1 <- paste0(y1s[i], "_Mean")
+  c_s2 <- paste0(y2s[i], "_SD");   c_s1 <- paste0(y1s[i], "_SD")
+  c_n2 <- paste0(y2s[i], "_N");    c_n1 <- paste0(y1s[i], "_N")
+  if (!c_m2 %in% names(tbl_df) || !c_m1 %in% names(tbl_df)) next
+  diff_tbl[[paste0(pairs[i], "_ΔMean")]] <- round(tbl_df[[c_m2]] - tbl_df[[c_m1]], 2)
+  diff_tbl[[paste0(pairs[i], "_ΔSD")]]   <- round(tbl_df[[c_s2]] - tbl_df[[c_s1]], 2)
+  diff_tbl[[paste0(pairs[i], "_ΔN")]]    <- tbl_df[[c_n2]] - tbl_df[[c_n1]]
+}
 
 delta_mean_sd_cols <- grep("_Δ(Mean|SD)$", names(diff_tbl), value = TRUE)
 
-flextable::flextable(diff_tbl) |>
-  flextable::bold(part = "header") |>
-  flextable::fontsize(size = 9, part = "all") |>
-  flextable::colformat_double(j = delta_mean_sd_cols, digits = 2) |>
-  flextable::set_table_properties(layout = "autofit", width = 1)
+if (nrow(diff_tbl) > 0 && length(delta_mean_sd_cols) > 0) {
+  flextable::flextable(diff_tbl) |>
+    flextable::bold(part = "header") |>
+    flextable::fontsize(size = 9, part = "all") |>
+    flextable::colformat_double(j = delta_mean_sd_cols, digits = 2) |>
+    flextable::set_table_properties(layout = "autofit", width = 1)
+} else {
+  cat("*No year-to-year changes to display for the selected report years.*\n")
+}
 ```
 
 ```{r mean-trend-plot, fig.width=8, fig.height=5, results='asis'}
@@ -133,6 +151,9 @@ cat(general_trend_results$proficiency$text$narrative)
 
 ```{r tbl-proficiency, tab.cap="Percent Proficient and Student Counts by Year, Subject, and Grade"}
 prof_tbl <- general_trend_results$proficiency$table
+if (!is.null(report_years)) {
+  prof_tbl <- prof_tbl |> dplyr::filter(.data[["YEAR"]] %in% report_years)
+}
 
 yr_order  <- sort(unique(prof_tbl$YEAR))
 stat_cols <- as.vector(outer(yr_order, c("Pct", "N"), paste, sep = "_"))
@@ -155,35 +176,43 @@ flextable::flextable(display_tbl) |>
 ```
 
 ```{r tbl-proficiency-changes, tab.cap="Year-to-Year Changes in Percent Proficient and Student Counts by Subject and Grade"}
-py1s   <- yr_order[-length(yr_order)]
-py2s   <- yr_order[-1]
-ppairs <- paste0(py1s, "→", py2s)
+disp_df <- as.data.frame(display_tbl)
+py1s    <- head(yr_order, -1L)
+py2s    <- tail(yr_order, -1L)
+ppairs  <- paste0(py1s, "→", py2s)
 
-prof_diff_tbl <- display_tbl[, c("SUBJECT", "GRADE")]
-for (i in seq_along(ppairs))
-  prof_diff_tbl[[paste0(ppairs[i], "_ΔPct")]] <-
-    round(display_tbl[[paste0(py2s[i], "_Pct")]] - display_tbl[[paste0(py1s[i], "_Pct")]], 1)
-for (i in seq_along(ppairs))
-  prof_diff_tbl[[paste0(ppairs[i], "_ΔN")]] <-
-    display_tbl[[paste0(py2s[i], "_N")]] - display_tbl[[paste0(py1s[i], "_N")]]
+prof_diff_tbl <- disp_df[, c("SUBJECT", "GRADE"), drop = FALSE]
+for (i in seq_along(ppairs)) {
+  c_p2 <- paste0(py2s[i], "_Pct"); c_p1 <- paste0(py1s[i], "_Pct")
+  c_n2 <- paste0(py2s[i], "_N");   c_n1 <- paste0(py1s[i], "_N")
+  if (!c_p2 %in% names(disp_df) || !c_p1 %in% names(disp_df)) next
+  prof_diff_tbl[[paste0(ppairs[i], "_ΔPct")]] <- round(disp_df[[c_p2]] - disp_df[[c_p1]], 1)
+  prof_diff_tbl[[paste0(ppairs[i], "_ΔN")]]   <- disp_df[[c_n2]] - disp_df[[c_n1]]
+}
 
 delta_pct_cols <- grep("_ΔPct$", names(prof_diff_tbl), value = TRUE)
 
-flextable::flextable(prof_diff_tbl) |>
-  flextable::bold(part = "header") |>
-  flextable::fontsize(size = 9, part = "all") |>
-  flextable::colformat_double(j = delta_pct_cols, digits = 1) |>
-  flextable::set_table_properties(layout = "autofit", width = 1)
+if (nrow(prof_diff_tbl) > 0 && length(delta_pct_cols) > 0) {
+  flextable::flextable(prof_diff_tbl) |>
+    flextable::bold(part = "header") |>
+    flextable::fontsize(size = 9, part = "all") |>
+    flextable::colformat_double(j = delta_pct_cols, digits = 1) |>
+    flextable::set_table_properties(layout = "autofit", width = 1)
+} else {
+  cat("*No year-to-year changes to display for the selected report years.*\n")
+}
 ```
 
 ```{r prof-trend-plot, fig.width=9, fig.height=4}
-general_trend_results$proficiency$plot$trend
+p <- general_trend_results$proficiency$plot$trend
+if (!is.null(p)) print(p) else cat("*Proficiency trend data not available.*\n")
 ```
 
 ### Proficiency Heatmap
 
 ```{r prof-heatmap-plot, fig.width=9, fig.height=4}
-general_trend_results$proficiency$plot$heatmap
+p <- general_trend_results$proficiency$plot$heatmap
+if (!is.null(p)) print(p) else cat("*Proficiency trend data not available.*\n")
 ```
 
 ------------------------------------------------------------------------
@@ -221,7 +250,8 @@ cat(general_trend_results$achievement_transitions$text$narrative)
 ### Transition Rates
 
 ```{r transition-rates-plot, fig.width=9, fig.height=5}
-general_trend_results$achievement_transitions$matrices$plot$rates
+p <- general_trend_results$achievement_transitions$matrices$plot$rates
+if (!is.null(p)) print(p) else cat("*Transition data not available.*\n")
 ```
 
 ### Flagged Transitions
@@ -232,6 +262,9 @@ cat(general_trend_results$achievement_transitions$flags$narrative)
 
 ```{r transition-flags-table}
 flags_tbl <- general_trend_results$achievement_transitions$flags$table
+if (!is.null(report_years) && !is.null(flags_tbl)) {
+  flags_tbl <- flags_tbl |> dplyr::filter(.data[["YEAR_2"]] %in% report_years)
+}
 if (!is.null(flags_tbl) && nrow(flags_tbl) > 0) {
   flextable::flextable(
     flags_tbl |>
@@ -256,6 +289,9 @@ if (!is.null(flags_tbl) && nrow(flags_tbl) > 0) {
 
 ```{r transition-cell-flags-table}
 cell_flags <- general_trend_results$achievement_transitions$flags$table_cells
+if (!is.null(report_years) && !is.null(cell_flags)) {
+  cell_flags <- cell_flags |> dplyr::filter(.data[["YEAR_2"]] %in% report_years)
+}
 if (!is.null(cell_flags) && nrow(cell_flags) > 0) {
   flextable::flextable(
     cell_flags |>
@@ -290,15 +326,18 @@ for (p in general_trend_results$achievement_transitions$matrices$plot$heatmap) {
 ### Transitions vs. Scale Score and Proficiency Trends
 
 ```{r transition-scatter-mean, fig.width=9, fig.height=4}
-general_trend_results$achievement_transitions$comparisons$plot$scatter_mean
+p <- general_trend_results$achievement_transitions$comparisons$plot$scatter_mean
+if (!is.null(p)) print(p) else cat("*Transition data not available.*\n")
 ```
 
 ```{r transition-scatter-prof, fig.width=9, fig.height=4}
-general_trend_results$achievement_transitions$comparisons$plot$scatter_prof
+p <- general_trend_results$achievement_transitions$comparisons$plot$scatter_prof
+if (!is.null(p)) print(p) else cat("*Transition data not available.*\n")
 ```
 
 ```{r transition-scatter-prof-vs-mean, fig.width=9, fig.height=4}
-general_trend_results$achievement_transitions$comparisons$plot$scatter_prof_vs_mean
+p <- general_trend_results$achievement_transitions$comparisons$plot$scatter_prof_vs_mean
+if (!is.null(p)) print(p) else cat("*Transition data not available.*\n")
 ```
 
 ```{r transition-divergences}
@@ -313,4 +352,60 @@ if (!is.null(divs) && nrow(divs) > 0) {
     flextable::bg(bg = "#9fc5e8", part = "body") |>
     flextable::set_table_properties(layout = "autofit", width = 1)
 }
+```
+
+------------------------------------------------------------------------
+
+# Appendix: Historical Data (All Years)
+
+```{r appendix-note, results='asis'}
+if (!is.null(report_years)) {
+  all_years  <- sort(unique(general_trend_results$proficiency$table$YEAR))
+  hist_years <- setdiff(all_years, report_years)
+  if (length(hist_years) > 0) {
+    cat("*Main report sections above show data for", report_years_label, "only.",
+        "Full data for all available years is shown below and exported to Excel.*\n\n")
+  } else {
+    cat("*No historical years outside the report window. All available years are shown in the main body.*\n\n")
+    knitr::knit_exit()
+  }
+} else {
+  cat("*All available years are shown in the main body. No appendix data.*\n\n")
+  knitr::knit_exit()
+}
+```
+
+## A.1 Mean Scale Scores — All Years
+
+```{r appendix-score-trends}
+full_tbl <- general_trend_results$score_trends$table
+mean_sd_cols_full <- grep("_(Mean|SD)$", names(full_tbl), value = TRUE)
+flextable::flextable(full_tbl) |>
+  flextable::bold(part = "header") |>
+  flextable::fontsize(size = 9, part = "all") |>
+  flextable::colformat_double(j = mean_sd_cols_full, digits = 2) |>
+  flextable::set_table_properties(layout = "autofit", width = 1)
+```
+
+## A.2 Proficiency — All Years
+
+```{r appendix-proficiency}
+full_prof <- general_trend_results$proficiency$table
+yr_order_full  <- sort(unique(full_prof$YEAR))
+stat_cols_full <- as.vector(outer(yr_order_full, c("Pct", "N"), paste, sep = "_"))
+
+full_display <- full_prof |>
+  dplyr::mutate(pct_proficient = round(pct_proficient, 1)) |>
+  dplyr::select(YEAR, SUBJECT, GRADE, Pct = pct_proficient, N = n) |>
+  tidyr::pivot_longer(cols = c("Pct", "N"), names_to = "stat", values_to = "value") |>
+  dplyr::mutate(col_name = paste(YEAR, stat, sep = "_")) |>
+  dplyr::select(-YEAR, -stat) |>
+  tidyr::pivot_wider(names_from = col_name, values_from = value) |>
+  dplyr::select(SUBJECT, GRADE, dplyr::any_of(stat_cols_full)) |>
+  dplyr::arrange(SUBJECT, GRADE)
+
+flextable::flextable(full_display) |>
+  flextable::bold(part = "header") |>
+  flextable::fontsize(size = 9, part = "all") |>
+  flextable::set_table_properties(layout = "autofit", width = 1)
 ```

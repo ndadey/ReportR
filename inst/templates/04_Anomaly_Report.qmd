@@ -19,6 +19,7 @@ params:
   spec_file:    null
   results_file: null
   min_n:        10
+  report_years: null
 ---
 
 ```{r setup}
@@ -51,6 +52,8 @@ source(spec_path)
 
 # Load pre-computed results from RDS.
 anomaly_results <- readRDS(params$results_file)
+report_years       <- params$report_years
+report_years_label <- if (is.null(report_years)) "all years" else paste(range(report_years), collapse = "–")
 ```
 
 ## Introduction
@@ -89,6 +92,9 @@ tbl_display <- anomaly_results$loss_hoss$table |>
     `D LOSS`      = pct_near_loss_change,
     `LOSS Flag`   = loss_flag
   )
+if (!is.null(report_years)) {
+  tbl_display <- tbl_display |> dplyr::filter(.data[["Year"]] %in% report_years)
+}
 
 flextable::flextable(tbl_display) |>
   flextable::colformat_double(
@@ -168,6 +174,7 @@ The table below shows each year × subject × grade combination where at least o
 ```{r score-integrity-table}
 if (nrow(anomaly_results$score_integrity$text$table) > 0) {
   anomaly_results$score_integrity$text$table |>
+    dplyr::filter(if (!is.null(report_years)) .data[["YEAR"]] %in% report_years else TRUE) |>
     dplyr::select(
       Year                  = YEAR,
       Subject               = SUBJECT,
@@ -218,6 +225,7 @@ The table below shows the year-to-year change in mean scale score (**Δ Score**)
 delta_tbl <- anomaly_results$outliers$table |>
   dplyr::filter(!is.na(.data[["delta_mean_score"]]) |
                 !is.na(.data[["delta_pct_proficient"]])) |>
+  dplyr::filter(if (!is.null(report_years)) .data[["YEAR"]] %in% report_years else TRUE) |>
   dplyr::mutate(
     year_pair  = paste0(.data[["YEAR"]] - 1L, "\u2013", .data[["YEAR"]]),
     grade_lbl  = dplyr::if_else(
@@ -280,6 +288,7 @@ flextable::flextable(delta_tbl) |>
 ```{r outliers-table}
 flagged_tbl <- anomaly_results$outliers$table |>
   dplyr::filter(.data[["outlier_flag"]] != "None") |>
+  dplyr::filter(if (!is.null(report_years)) .data[["YEAR"]] %in% report_years else TRUE) |>
   dplyr::mutate(
     year_pair = paste0(.data[["YEAR"]] - 1L, "\u2013", .data[["YEAR"]])
   ) |>
@@ -397,6 +406,9 @@ if (is.null(wide_tbl) || nrow(wide_tbl) == 0) {
 
 ```{r correlations-flagged-table}
 cor_tbl <- anomaly_results$correlations$table
+if (!is.null(report_years) && !is.null(cor_tbl)) {
+  cor_tbl <- cor_tbl |> dplyr::filter(.data[["YEAR_2"]] %in% report_years)
+}
 
 flagged_cor <- cor_tbl |>
   dplyr::filter((!is.na(.data[["low_flag"]])  & .data[["low_flag"]]) |
@@ -433,5 +445,24 @@ if (nrow(flagged_cor) == 0) {
       "Flagged grade-pair combinations. Low correlation (< 0.50) highlighted in yellow; drop > 0.15 from prior year highlighted in orange."
     ) |>
     flextable::set_table_properties(layout = "autofit", width = 1)
+}
+```
+
+------------------------------------------------------------------------
+
+# Appendix: Historical Data (All Years)
+
+```{r appendix-note, results='asis'}
+if (!is.null(report_years)) {
+  all_years  <- sort(unique(anomaly_results$loss_hoss$table$YEAR))
+  hist_years <- setdiff(all_years, report_years)
+  if (length(hist_years) > 0) {
+    cat("*Main report sections above show data for", report_years_label, "only.",
+        "Full data for all available years is exported to Excel.*\n\n")
+  } else {
+    cat("*No historical years outside the report window.*\n\n")
+  }
+} else {
+  cat("*All available years are shown in the main body.*\n\n")
 }
 ```

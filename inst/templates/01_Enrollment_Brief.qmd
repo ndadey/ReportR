@@ -17,6 +17,7 @@ params:
   spec_file:    null
   results_file: null
   min_n:        10
+  report_years: null
 ---
 
 ```{r setup}
@@ -41,6 +42,8 @@ if (!is.null(spec_path)) source(spec_path)
 
 enrollment_results <- readRDS(params$results_file)
 min_n              <- params$min_n
+report_years       <- params$report_years
+report_years_label <- if (is.null(report_years)) "all years" else paste(range(report_years), collapse = "–")
 ```
 
 ## `r assessment_spec$program$name` — Enrollment Brief
@@ -134,5 +137,24 @@ if (!is.null(plot_sg) && requireNamespace("ggalluvial", quietly = TRUE)) {
   cat("*Install the `ggalluvial` package to render the composition diagram.*\n")
 } else {
   cat("*No subgroup composition data available.*\n")
+}
+```
+
+------------------------------------------------------------------------
+
+# Appendix: Historical Data (All Years)
+
+```{r appendix-note, results='asis'}
+if (!is.null(report_years)) {
+  all_years  <- sort(unique(enrollment_results$counts$by_year$YEAR))
+  hist_years <- setdiff(all_years, report_years)
+  if (length(hist_years) > 0) {
+    cat("*Main report sections above show data for", report_years_label, "only.",
+        "Full data for all available years is exported to Excel.*\n\n")
+  } else {
+    cat("*No historical years outside the report window.*\n\n")
+  }
+} else {
+  cat("*All available years are shown in the main body.*\n\n")
 }
 ```

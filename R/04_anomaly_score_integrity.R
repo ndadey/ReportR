@@ -75,43 +75,12 @@ compute_score_integrity <- function(student_results_long,
 
   # ----------------------------------------------------------
   # 1) Join LOSS/HOSS/cuts to each student row
+  #    EOC subjects match on SUBJECT alone; unmatched cells are warned about
+  #    once per run by compute_loss_hoss_table(), so stay silent here.
   # ----------------------------------------------------------
-  lookup <- build_loss_hoss_lookup(assessment_spec)
-
-  # Build cuts lookup separately (build_loss_hoss_lookup only returns LOSS/HOSS)
-  cuts_rows <- lapply(names(assessment_spec$subjects), function(subj) {
-    grades <- assessment_spec$subjects[[subj]]$grades
-    if (is.null(grades)) {
-      # EOC subject
-      ss <- assessment_spec$scale_scores[[subj]]
-      if (is.null(ss)) return(NULL)
-      data.frame(
-        SUBJECT = subj,
-        GRADE   = NA_integer_,
-        CUTS    = I(list(ss$cuts)),
-        stringsAsFactors = FALSE
-      )
-    } else {
-      # Span-tested subject
-      do.call(rbind, lapply(grades, function(g) {
-        ss <- assessment_spec$scale_scores[[subj]][[as.character(g)]]
-        if (is.null(ss)) return(NULL)
-        data.frame(
-          SUBJECT = subj,
-          GRADE   = as.integer(g),
-          CUTS    = I(list(ss$cuts)),
-          stringsAsFactors = FALSE
-        )
-      }))
-    }
-  })
-  cuts_lookup <- do.call(rbind, cuts_rows)
-
   dat <- student_results_long |>
     dplyr::filter(!is.na(.data[["SCALE_SCORE"]])) |>
-    dplyr::mutate(GRADE = as.integer(.data[["GRADE"]])) |>
-    dplyr::left_join(lookup,      by = c("SUBJECT", "GRADE")) |>
-    dplyr::left_join(cuts_lookup, by = c("SUBJECT", "GRADE"))
+    join_score_bounds(assessment_spec, cuts = TRUE, warn_unmatched = FALSE)
 
   # ----------------------------------------------------------
   # 2) Check 1 -- invalid scores

@@ -13,21 +13,24 @@ get_score_spec(assessment_spec, subject, grade = NULL)
 \code{assessment_spec$subjects}.}
 
 \item{grade}{Integer scalar or \code{NULL}. Grade level for span-tested subjects;
-\code{NULL} for EOC subjects.}
+ignored for EOC subjects.}
 }
 \value{
 A named list with elements \code{loss}, \code{hoss}, and \code{cuts}, or \code{NULL} if
 the combination is not found in the spec.
 }
 \description{
-Looks up the \code{loss}, \code{hoss}, and \code{cuts} entry from \code{assessment_spec$scale_scores}
-using the correct key format: \code{"SUBJECT_GRADE"} for span-tested subjects and
-\code{"SUBJECT"} for EOC subjects (where \code{grade} is \code{NULL}).
+Looks up the \code{loss}, \code{hoss}, and \code{cuts} entry from \code{assessment_spec$scale_scores}.
+Span-tested subjects are keyed by grade (\code{scale_scores$SUBJECT$GRADE}); EOC
+subjects have no grade nesting (\code{scale_scores$SUBJECT}) and are resolved on
+\code{subject} alone, so a \code{grade} supplied for an EOC subject is ignored rather
+than causing a lookup miss.
 }
 \examples{
 \dontrun{
 source(system.file("specs/00_MS_Assessment_Spec.R", package = "ReportR"))
 get_score_spec(assessment_spec, "ELA", 3)
 get_score_spec(assessment_spec, "ENG_II")
+get_score_spec(assessment_spec, "ALG_I", 9)  # EOC — grade ignored
 }
 }

@@ -32,3 +32,5 @@ states/*
 *.Rdata
 *.RData
 *.rdata
+*.html
+*_files/

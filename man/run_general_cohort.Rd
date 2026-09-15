@@ -46,8 +46,7 @@ The cohort results list, returned invisibly.
 Standalone orchestrator for Line 1.3 cohort composition and
 performance analysis. Parallel to \code{\link[=run_general_trend_analysis]{run_general_trend_analysis()}} (Line 1)
 and \code{\link[=run_anomaly_analysis]{run_anomaly_analysis()}} (Line 4). Runs \code{\link[=run_cohort_analysis]{run_cohort_analysis()}}, saves
-results to RDS using the Dropbox-safe tempdir pattern, and optionally
-renders the Quarto report.
+results to RDS, and optionally renders the Quarto report.
 }
 \details{
 Run the General Cohort Analysis (Line 1.3)

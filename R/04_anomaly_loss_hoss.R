@@ -65,24 +65,20 @@ compute_loss_hoss_table <- function(student_results_long,
   )
 
   # ----------------------------------------------------------
-  # 1) Build LOSS/HOSS lookup from assessment_spec
-  #    Uses the flat key format: "SUBJECT_GRADE" or "SUBJECT"
-  # ----------------------------------------------------------
-  loss_hoss_lookup <- build_loss_hoss_lookup(assessment_spec)
-
-  # ----------------------------------------------------------
-  # 2) Flag students near LOSS / HOSS
+  # 1) Attach LOSS/HOSS and flag students near either boundary.
+  #    join_score_bounds() matches EOC subjects on SUBJECT alone and warns
+  #    about any SUBJECT x GRADE cell the spec does not cover. This is the
+  #    only site in Line 4 that warns, so one run reports unmatched cells once.
   # ----------------------------------------------------------
   student_flagged <- student_results_long |>
-    dplyr::mutate(GRADE = as.integer(.data[["GRADE"]])) |>
-    dplyr::left_join(loss_hoss_lookup, by = c("SUBJECT", "GRADE")) |>
+    join_score_bounds(assessment_spec) |>
     dplyr::mutate(
       near_loss = .data[["SCALE_SCORE"]] <= (.data[["LOSS"]] + point_adjust),
       near_hoss = .data[["SCALE_SCORE"]] >= (.data[["HOSS"]] - point_adjust)
     )
 
   # ----------------------------------------------------------
-  # 3) Aggregate to year × subject × grade
+  # 2) Aggregate to year × subject × grade
   # ----------------------------------------------------------
   loss_hoss_table <- student_flagged |>
     dplyr::group_by(.data[["YEAR"]], .data[["SUBJECT"]], .data[["GRADE"]]) |>
@@ -103,7 +99,7 @@ compute_loss_hoss_table <- function(student_results_long,
     )
 
   # ----------------------------------------------------------
-  # 4) Apply severity flags
+  # 3) Apply severity flags
   # ----------------------------------------------------------
   loss_hoss_table <- loss_hoss_table |>
     dplyr::mutate(
@@ -125,7 +121,7 @@ compute_loss_hoss_table <- function(student_results_long,
     dplyr::arrange(.data[["SUBJECT"]], .data[["GRADE"]], .data[["YEAR"]])
 
   # ----------------------------------------------------------
-  # 5) Year-over-year change columns
+  # 4) Year-over-year change columns
   #    NA when: first year in group, or either year is suppressed (small_n)
   # ----------------------------------------------------------
   loss_hoss_table |>
@@ -511,15 +507,24 @@ summarize_loss_hoss_findings <- function(loss_hoss_table) {
     ggplot2::aes(x = .data[["x"]], y = .data[["y"]],
                  color = .data[["year_lbl"]], group = .data[["year_lbl"]])
   ) +
-    ggplot2::geom_line(linewidth = 0.7) +
-    ggplot2::geom_vline(xintercept = hoss_val, linetype = "dashed",
-                        color = "#cc0000", linewidth = 0.9) +
-    ggplot2::annotate("text", x = hoss_val, y = Inf, label = " HOSS",
-                      hjust = 0, vjust = 1.5, color = "#cc0000", size = 2.8) +
-    ggplot2::geom_vline(xintercept = loss_val, linetype = "dashed",
-                        color = "#1565c0", linewidth = 0.9) +
-    ggplot2::annotate("text", x = loss_val, y = Inf, label = "LOSS ",
-                      hjust = 1, vjust = 1.5, color = "#1565c0", size = 2.8)
+    ggplot2::geom_line(linewidth = 0.7)
+
+  # Boundary markers only where the spec supplies a bound — a cell plotted over
+  # its observed range has no LOSS/HOSS to draw.
+  if (!is.na(hoss_val)) {
+    p <- p +
+      ggplot2::geom_vline(xintercept = hoss_val, linetype = "dashed",
+                          color = "#cc0000", linewidth = 0.9) +
+      ggplot2::annotate("text", x = hoss_val, y = Inf, label = " HOSS",
+                        hjust = 0, vjust = 1.5, color = "#cc0000", size = 2.8)
+  }
+  if (!is.na(loss_val)) {
+    p <- p +
+      ggplot2::geom_vline(xintercept = loss_val, linetype = "dashed",
+                          color = "#1565c0", linewidth = 0.9) +
+      ggplot2::annotate("text", x = loss_val, y = Inf, label = "LOSS ",
+                        hjust = 1, vjust = 1.5, color = "#1565c0", size = 2.8)
+  }
 
   if (length(cuts_in) > 0L) {
     p <- p + ggplot2::geom_vline(
@@ -593,8 +598,6 @@ plot_loss_hoss_distributions <- function(student_results_long,
     first_row <- utils::head(cell_rows, 1)
     loss_val  <- first_row[["LOSS"]]
     hoss_val  <- first_row[["HOSS"]]
-    x_lo      <- loss_val - x_margin
-    x_hi      <- hoss_val + x_margin
 
     # Cut scores from spec
     cuts <- get_score_spec(assessment_spec, subj,
@@ -641,6 +644,15 @@ plot_loss_hoss_distributions <- function(student_results_long,
 
     if (length(cell_idx) == 0L) return(NULL)
     raw_dat <- split_data[[cell_idx[1L]]]
+
+    # Plot range: the spec's boundaries plus a margin where available, else the
+    # observed score range (same fallback as plot_score_density()). A cell the
+    # spec does not cover must degrade to a plot over its own data, never a
+    # non-finite density window.
+    obs  <- suppressWarnings(range(raw_dat[["SCALE_SCORE"]], na.rm = TRUE))
+    x_lo <- if (!is.na(loss_val)) loss_val - x_margin else obs[1L]
+    x_hi <- if (!is.na(hoss_val)) hoss_val + x_margin else obs[2L]
+    if (!is.finite(x_lo) || !is.finite(x_hi) || x_lo >= x_hi) return(NULL)
 
     # Pre-compute kernel density (512 pts/year) — ggplot stores curves, not raw data
     yrs_cell <- sort(unique(raw_dat[["YEAR"]]))

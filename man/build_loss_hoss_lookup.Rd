@@ -4,16 +4,23 @@
 \alias{build_loss_hoss_lookup}
 \title{Build a LOSS/HOSS lookup table from an assessment spec}
 \usage{
-build_loss_hoss_lookup(assessment_spec)
+build_loss_hoss_lookup(assessment_spec, cuts = FALSE)
 }
 \arguments{
 \item{assessment_spec}{Named list describing the assessment program.}
+
+\item{cuts}{Logical. When \code{TRUE}, append a \code{CUTS} list-column holding each
+row's cut-score vector. Default \code{FALSE}.}
 }
 \value{
 A data frame with columns \code{SUBJECT} (character), \code{GRADE} (integer,
-\code{NA} for EOC subjects), \code{LOSS} (numeric), and \code{HOSS} (numeric). One row
-per subject/grade combination that has a matching entry in
-\code{assessment_spec$scale_scores}.
+\code{NA} for EOC subjects), \code{LOSS} (numeric), \code{HOSS} (numeric), and — when
+\code{cuts = TRUE} — \code{CUTS} (list). One row per subject/grade combination that
+has a matching entry in \code{assessment_spec$scale_scores}.
+
+Note that EOC rows carry \code{GRADE = NA}. Do not join this table to student
+data on \code{SUBJECT} + \code{GRADE} directly — states commonly report a real tested
+grade on EOC records, which would miss. Use \code{\link[=join_score_bounds]{join_score_bounds()}} instead.
 }
 \description{
 Iterates over every subject (and grade, for span-tested subjects) defined in

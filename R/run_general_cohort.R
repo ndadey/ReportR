@@ -55,15 +55,10 @@ run_general_cohort <- function(student_results_long,
 
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-  # --- 1. Filter years (always after standardization) ----------------------
-  if (!is.null(report_years)) {
-    message("Filtering to report years: ",
-            paste(report_years, collapse = ", "), "...")
-    student_results_long <- student_results_long |>
-      dplyr::filter(.data[["YEAR"]] %in% report_years)
-  }
-
-  # --- 2. Run analysis -----------------------------------------------------
+  # --- 1. Run analysis on all years ----------------------------------------
+  # report_years controls display in the QMD (main body vs appendix), not
+  # which years are computed. All available years are always analysed so that
+  # historical data appears in the appendix and is exported to Excel.
   message("Running cohort analysis...")
   cohort_results <- run_cohort_analysis(student_results_long, assessment_spec,
                                          min_n = min_n)
@@ -76,16 +71,15 @@ run_general_cohort <- function(student_results_long,
 
   # --- 4. Render report (optional) -----------------------------------------
   if (render_report) {
-    qmd_src <- system.file("templates", "01_General_Cohort_Report.qmd",
-                            package = "ReportR")
-
-    # Fall back to source-tree path during development
-    if (!nzchar(qmd_src)) {
-      pkg_root <- tryCatch(find.package("ReportR"), error = function(e) NULL)
-      if (!is.null(pkg_root)) {
-        qmd_src <- file.path(pkg_root, "inst", "templates",
-                             "01_General_Cohort_Report.qmd")
-      }
+    # Prefer source-tree template so edits are picked up without reinstalling
+    pkg_root <- tryCatch(find.package("ReportR"), error = function(e) NULL)
+    qmd_src  <- if (!is.null(pkg_root))
+      file.path(pkg_root, "inst", "templates", "01_General_Cohort_Report.qmd")
+    else
+      ""
+    if (!nzchar(qmd_src) || !file.exists(qmd_src)) {
+      qmd_src <- system.file("templates", "01_General_Cohort_Report.qmd",
+                              package = "ReportR")
     }
 
     if (!nzchar(qmd_src) || !file.exists(qmd_src)) {
@@ -120,7 +114,8 @@ run_general_cohort <- function(student_results_long,
         pkg_path     = pkg_path,
         spec_file    = spec_file,
         results_file = rds_path,
-        min_n        = min_n
+        min_n        = min_n,
+        report_years = report_years
       )
     )
 
