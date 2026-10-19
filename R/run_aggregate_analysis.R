@@ -71,10 +71,10 @@ run_aggregate_analysis <- function(student_results_long,
   if (!school_results_available) {
     message(
       "school_results_long not provided.\n",
-      "  5.2 Accountability Grades       — SKIPPED\n",
-      "  5.3 co-op / locale breakdowns   — SKIPPED\n",
-      "  5.4 Outlier characterization    — SKIPPED (identification will run)\n",
-      "  5.7 Intervention Analysis       — SKIPPED\n"
+      "  5.2 Accountability Grades       \u2014 SKIPPED\n",
+      "  5.3 co-op / locale breakdowns   \u2014 SKIPPED\n",
+      "  5.4 Outlier characterization    \u2014 SKIPPED (identification will run)\n",
+      "  5.7 Intervention Analysis       \u2014 SKIPPED\n"
     )
   }
 

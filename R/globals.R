@@ -4,6 +4,7 @@
 #
 # .data is imported from rlang to enable the .data[["col"]] pronoun pattern.
 #' @importFrom rlang .data :=
+#' @importFrom stats setNames as.formula
 utils::globalVariables(c(
   ".data",
 
@@ -60,6 +61,10 @@ utils::globalVariables(c(
   # --- trend: score trend plots ---
   "mean_val", "sd_val", "lower", "upper",
   "p25_val", "p50_val", "p75_val",
+  "bound",
+
+  # --- alluvial / Sankey plots (ggalluvial computed variable) ---
+  "stratum",
 
   # --- trend: proficiency ---
   "PROFICIENT", "pct_proficient", "n_proficient",

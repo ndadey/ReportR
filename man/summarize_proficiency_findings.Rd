@@ -14,6 +14,9 @@ summarize_proficiency_findings(
 \item{proficiency_table}{Data frame returned by \code{\link[=compute_proficiency]{compute_proficiency()}}.}
 
 \item{assessment_spec}{Named list describing the assessment program.}
+
+\item{flat_threshold}{Numeric. Changes smaller than this (in percentage
+points) are labelled "relatively flat" in the narrative. Default \code{1.0}.}
 }
 \value{
 A named list:

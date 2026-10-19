@@ -24,6 +24,16 @@ Calculates summary statistics for scale score distributions within each
 YEAR x SUBJECT x GRADE cell to screen for unusual shapes (flat, bimodal,
 or highly skewed). All statistics are suppressed to \code{NA} where \code{n < min_n}.
 }
+\details{
+Each cell gets at most one flag, checked in this order:
+\itemize{
+\item \strong{Bimodal}: Sarle's bimodality coefficient above 0.555.
+\item \strong{Skewed}: absolute skewness above 1.
+\item \strong{Flat}: excess kurtosis below -1, meaning scores are spread evenly with
+no clear peak. A uniform distribution has excess kurtosis of -1.2; a
+normal distribution has 0.
+}
+}
 \examples{
 \dontrun{
 source(system.file("specs/00_DEMO_Assessment_Spec.R", package = "ReportR"))

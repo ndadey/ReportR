@@ -7,6 +7,8 @@ Description: Provides a modular, repeatable pipeline for producing annual analys
     (general trends, student groups, aggregate school/district, and anomaly detection)
     and multiple output formats (docx, html, pptx).
 License: MIT + file LICENSE
+URL: https://ndadey.github.io/ReportR/, https://github.com/ndadey/ReportR
+BugReports: https://github.com/ndadey/ReportR/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
@@ -26,4 +28,5 @@ Suggests:
     ggalluvial,
     patchwork,
     lme4,
-    ggrepel
+    ggrepel,
+    quarto

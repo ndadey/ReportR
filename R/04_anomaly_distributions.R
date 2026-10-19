@@ -49,6 +49,13 @@
 #' YEAR x SUBJECT x GRADE cell to screen for unusual shapes (flat, bimodal,
 #' or highly skewed). All statistics are suppressed to `NA` where `n < min_n`.
 #'
+#' Each cell gets at most one flag, checked in this order:
+#' * **Bimodal**: Sarle's bimodality coefficient above 0.555.
+#' * **Skewed**: absolute skewness above 1.
+#' * **Flat**: excess kurtosis below -1, meaning scores are spread evenly with
+#'   no clear peak. A uniform distribution has excess kurtosis of -1.2; a
+#'   normal distribution has 0.
+#'
 #' @param student_results_long A long-format student results data frame.
 #' @param assessment_spec Named list describing the assessment program.
 #' @param min_n Integer. Minimum group size for suppression. Default `10`.
@@ -104,17 +111,11 @@ compute_distributions <- function(student_results_long,
   small <- stats_tbl[["n"]] < min_n
   stats_tbl[small, shape_cols] <- NA_real_
 
-  # Join LOSS/HOSS for flatness threshold (EOC subjects match on SUBJECT alone)
-  stats_tbl <- join_score_bounds(stats_tbl, assessment_spec,
-                                 warn_unmatched = FALSE)
-
   # Apply flags (Bimodal > Skewed > Flat in priority)
   stats_tbl <- stats_tbl |>
     dplyr::mutate(
-      flat_flag     = !is.na(.data[["sd"]]) &
-                      !is.na(.data[["LOSS"]]) &
-                      !is.na(.data[["HOSS"]]) &
-                      .data[["sd"]] < 0.25 * (.data[["HOSS"]] - .data[["LOSS"]]),
+      flat_flag     = !is.na(.data[["kurtosis"]]) &
+                      .data[["kurtosis"]] < -1.0,
       bimodal_flag  = !is.na(.data[["bimodality_coefficient"]]) &
                       .data[["bimodality_coefficient"]] > 0.555,
       skewed_flag   = !is.na(.data[["skewness"]]) &
@@ -131,7 +132,7 @@ compute_distributions <- function(student_results_long,
         .data[["skewed_flag"]]  ~
           "Absolute skewness exceeds 1.0",
         .data[["flat_flag"]]    ~
-          "SD unusually low relative to score range",
+          "Excess kurtosis below -1 (scores spread evenly, no clear peak)",
         TRUE ~ NA_character_
       )
     ) |>
@@ -146,31 +147,6 @@ compute_distributions <- function(student_results_long,
   stats_tbl
 }
 
-
-#' Plot distribution shape diagnostics
-#'
-#' Returns a named list of three plots summarising the distribution shape
-#' screening results.
-#'
-#' @param distribution_table Data frame returned by [compute_distributions()].
-#' @param student_results_long A long-format student results data frame (used
-#'   to draw kernel density plots for flagged cells).
-#' @param assessment_spec Named list describing the assessment program (used for
-#'   subject labels and LOSS/HOSS boundaries).
-#'
-#' @return A named list with:
-#'   * `$flag_summary` — bar chart of flagged cell counts by subject and flag type;
-#'     `NULL` if no cells are flagged
-#'   * `$shape_heatmap` — heatmap of `bimodality_coefficient` by grade × year,
-#'     faceted by subject
-#'   * `$density_flagged` — named list of kernel density plots for flagged cells
-#' @export
-#' @examples
-#' \dontrun{
-#' tbl <- compute_distributions(demo_data, assessment_spec)
-#' plots <- plot_distributions(tbl, demo_data, assessment_spec)
-#' plots$shape_heatmap
-#' }
 
 # Package-level helper — builds one flagged-cell density plot from pre-computed
 # curve data. Defined outside plot_distributions so its environment never holds
@@ -202,6 +178,30 @@ compute_distributions <- function(student_results_long,
   p
 }
 
+#' Plot distribution shape diagnostics
+#'
+#' Returns a named list of three plots summarising the distribution shape
+#' screening results.
+#'
+#' @param distribution_table Data frame returned by [compute_distributions()].
+#' @param student_results_long A long-format student results data frame (used
+#'   to draw kernel density plots for flagged cells).
+#' @param assessment_spec Named list describing the assessment program (used for
+#'   subject labels and LOSS/HOSS boundaries).
+#'
+#' @return A named list with:
+#'   * `$flag_summary` — bar chart of flagged cell counts by subject and flag type;
+#'     `NULL` if no cells are flagged
+#'   * `$shape_heatmap` — heatmap of `bimodality_coefficient` by grade × year,
+#'     faceted by subject
+#'   * `$density_flagged` — named list of kernel density plots for flagged cells
+#' @export
+#' @examples
+#' \dontrun{
+#' tbl <- compute_distributions(demo_data, assessment_spec)
+#' plots <- plot_distributions(tbl, demo_data, assessment_spec)
+#' plots$shape_heatmap
+#' }
 plot_distributions <- function(distribution_table,
                                 student_results_long,
                                 assessment_spec) {

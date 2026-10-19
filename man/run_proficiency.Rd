@@ -19,6 +19,9 @@ run_proficiency(
 
 \item{min_n}{Integer. Minimum group size for small-n suppression. Default
 \code{10}.}
+
+\item{flat_threshold}{Numeric. Changes smaller than this (in percentage
+points) are labelled "relatively flat" in the narrative. Default \code{1.0}.}
 }
 \value{
 A named list:

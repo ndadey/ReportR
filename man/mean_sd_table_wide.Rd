@@ -37,6 +37,6 @@ the template works without modification once this function exists.
 \examples{
 \dontrun{
 source(system.file("specs/00_DEMO_Assessment_Spec.R", package = "ReportR"))
-mean_sd_table_wide(demo_data, assessment_spec, subject = "ELA")
+mean_sd_table_wide(demo_data, assessment_spec, subject = "READING")
 }
 }

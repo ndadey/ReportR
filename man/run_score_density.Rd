@@ -30,6 +30,6 @@ over time by subject and grade.
 \dontrun{
 source(system.file("specs/00_DEMO_Assessment_Spec.R", package = "ReportR"))
 out <- run_score_density(demo_data, assessment_spec)
-out$plot$density[["ELA"]]
+out$plot$density[["READING"]]
 }
 }

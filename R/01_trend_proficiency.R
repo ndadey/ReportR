@@ -164,6 +164,8 @@ plot_proficiency <- function(proficiency_table, assessment_spec) {
 #'
 #' @param proficiency_table Data frame returned by [compute_proficiency()].
 #' @param assessment_spec Named list describing the assessment program.
+#' @param flat_threshold Numeric. Changes smaller than this (in percentage
+#'   points) are labelled "relatively flat" in the narrative. Default `1.0`.
 #'
 #' @return A named list:
 #'   * `$table` — the input `proficiency_table`
@@ -194,7 +196,7 @@ summarize_proficiency_findings <- function(proficiency_table, assessment_spec,
   bench_label <- assessment_spec$achievement_levels$policy_benchmark
 
   trend_arrow <- function(delta) {
-    if (abs(delta) < flat_threshold) "→" else if (delta > 0) "↑" else "↓"
+    if (abs(delta) < flat_threshold) "\u2192" else if (delta > 0) "\u2191" else "\u2193"
   }
   trend_desc <- function(delta) {
     pts <- paste0(round(abs(delta), 1), " pp")
@@ -250,7 +252,7 @@ summarize_proficiency_findings <- function(proficiency_table, assessment_spec,
       delta <- changes[["delta"]][1]
       by_subject[[s]] <- paste0(
         "**", lbl, ":** ", trend_arrow(delta), " ", trend_desc(delta),
-        " (", first_yr, " → ", last_yr, ")"
+        " (", first_yr, " \u2192 ", last_yr, ")"
       )
     } else {
       grade_bullets <- vapply(seq_len(nrow(changes)), function(i) {
@@ -258,7 +260,7 @@ summarize_proficiency_findings <- function(proficiency_table, assessment_spec,
         delta <- changes[["delta"]][i]
         g_lbl <- if (is.na(g)) "" else paste0("Grade ", g)
         paste0("* ", g_lbl, ": ", trend_arrow(delta), " ", trend_desc(delta),
-               " (", first_yr, " → ", last_yr, ")")
+               " (", first_yr, " \u2192 ", last_yr, ")")
       }, character(1))
       by_subject[[s]] <- paste0(
         "**", lbl, "**\n\n",
@@ -291,6 +293,8 @@ summarize_proficiency_findings <- function(proficiency_table, assessment_spec,
 #' @param assessment_spec Named list describing the assessment program.
 #' @param min_n Integer. Minimum group size for small-n suppression. Default
 #'   `10`.
+#' @param flat_threshold Numeric. Changes smaller than this (in percentage
+#'   points) are labelled "relatively flat" in the narrative. Default `1.0`.
 #'
 #' @return A named list:
 #'   * `$table` — proficiency summary data frame

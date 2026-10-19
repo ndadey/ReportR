@@ -10,6 +10,9 @@ summarize_score_trends(score_summary, assessment_spec, flat_threshold = 1)
 \item{score_summary}{Named list returned by \code{\link[=compute_score_summary]{compute_score_summary()}}.}
 
 \item{assessment_spec}{Named list describing the assessment program.}
+
+\item{flat_threshold}{Numeric. Changes smaller than this (in scale score
+points) are labelled "relatively flat" in the narrative. Default \code{1.0}.}
 }
 \value{
 A named list:

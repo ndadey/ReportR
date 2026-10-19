@@ -335,7 +335,7 @@ compute_performance_trends <- function(data,
       }) |>
       dplyr::ungroup() |>
       dplyr::mutate(
-        year_pair = paste0(yr1, "–", yr2),
+        year_pair = paste0(yr1, "\u2013", yr2),
         flagged   = !is.na(.data[["spearman_r"]]) &
           .data[["spearman_r"]] < correlation_flag_threshold
       )

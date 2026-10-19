@@ -27,9 +27,19 @@
 ^inst/templates/.*\.docx$
 ^inst/templates/.*\.html$
 
+# Reference documents kept next to the specs (local only, not shipped)
+^inst/specs/.*\.pdf$
+
 # Claude Code memory
 ^\.claude$
 
 # RStudio
 ^.*\.Rproj$
 ^\.Rproj\.user$
+
+# pkgdown website (built and deployed by .github/workflows/pkgdown.yaml)
+^\.github$
+^_pkgdown\.yml$
+^pkgdown$
+^docs$
+^vignettes/articles$

@@ -64,7 +64,7 @@
 #' \dontrun{
 #' source(system.file("specs/00_DEMO_Assessment_Spec.R", package = "ReportR"))
 #' plots <- plot_score_density(demo_data, assessment_spec)
-#' plots[["ELA"]]
+#' plots[["READING"]]
 #' }
 plot_score_density <- function(student_results_long,
                                assessment_spec,
@@ -262,9 +262,9 @@ summarize_score_density <- function(student_results_long, assessment_spec) {
     "The figures below show how scale score distributions have shifted over ",
     "time for each subject in ", prog, ". Within each panel, curves represent ",
     "individual testing years overlaid on the same axes. Grades are shown as ",
-    "separate facets. Distributional changes — such as a rightward shift ",
+    "separate facets. Distributional changes \u2014 such as a rightward shift ",
     "(improving scores), increased spread, or the emergence of bimodal ",
-    "patterns — can indicate meaningful trends in student performance."
+    "patterns \u2014 can indicate meaningful trends in student performance."
   )
 
   list(narrative = narrative)
@@ -293,7 +293,7 @@ summarize_score_density <- function(student_results_long, assessment_spec) {
 #' \dontrun{
 #' source(system.file("specs/00_DEMO_Assessment_Spec.R", package = "ReportR"))
 #' out <- run_score_density(demo_data, assessment_spec)
-#' out$plot$density[["ELA"]]
+#' out$plot$density[["READING"]]
 #' }
 run_score_density <- function(student_results_long,
                               assessment_spec,

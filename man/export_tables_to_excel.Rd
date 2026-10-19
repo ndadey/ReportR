@@ -20,9 +20,15 @@ Invisibly returns the path to the written file.
 }
 \description{
 Recursively walks a results list (e.g. \code{anomaly_results} from
-\code{\link[=run_anomaly_analysis]{run_anomaly_analysis()}}) and writes every data frame found to a separate
-worksheet in a single Excel workbook. Sheet names are derived from the
-nested list path (e.g. \code{loss_hoss__table}, \code{outliers__table}).
+\code{\link[=run_anomaly_analysis]{run_anomaly_analysis()}}) and writes every non-empty data frame to its own
+worksheet in a single Excel workbook. Plots are skipped.
+}
+\details{
+Sheet names follow each table's place in the list, with \code{.} between levels
+(e.g. \code{loss_hoss.table}, \code{outliers.table}). Long slot names are abbreviated
+(\code{achievement_transitions} becomes \code{ach_trans}, \code{performance_trends} becomes
+\code{perf_trends}) so names fit Excel's 31-character limit; any name that is
+still too long has its longest part trimmed, keeping every level of the path.
 }
 \examples{
 \dontrun{

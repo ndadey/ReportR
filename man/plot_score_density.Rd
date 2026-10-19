@@ -30,6 +30,6 @@ margin) using \code{assessment_spec}.
 \dontrun{
 source(system.file("specs/00_DEMO_Assessment_Spec.R", package = "ReportR"))
 plots <- plot_score_density(demo_data, assessment_spec)
-plots[["ELA"]]
+plots[["READING"]]
 }
 }

@@ -203,7 +203,7 @@ compute_score_summary <- function(student_results_long,
 #' @examples
 #' \dontrun{
 #' source(system.file("specs/00_DEMO_Assessment_Spec.R", package = "ReportR"))
-#' mean_sd_table_wide(demo_data, assessment_spec, subject = "ELA")
+#' mean_sd_table_wide(demo_data, assessment_spec, subject = "READING")
 #' }
 mean_sd_table_wide <- function(student_results_long,
                                assessment_spec,
@@ -468,6 +468,8 @@ plot_score_trends <- function(score_summary, assessment_spec) {
 #'
 #' @param score_summary Named list returned by [compute_score_summary()].
 #' @param assessment_spec Named list describing the assessment program.
+#' @param flat_threshold Numeric. Changes smaller than this (in scale score
+#'   points) are labelled "relatively flat" in the narrative. Default `1.0`.
 #'
 #' @return A named list:
 #'   * `$table` — `ScaleScore_Stats_Report` data frame
@@ -503,7 +505,7 @@ summarize_score_trends <- function(score_summary, assessment_spec,
     )
 
   trend_arrow <- function(delta) {
-    if (abs(delta) < flat_threshold) "→" else if (delta > 0) "↑" else "↓"
+    if (abs(delta) < flat_threshold) "\u2192" else if (delta > 0) "\u2191" else "\u2193"
   }
   trend_desc <- function(delta) {
     pts <- paste0(round(abs(delta), 1), " points")
@@ -553,7 +555,7 @@ summarize_score_trends <- function(score_summary, assessment_spec,
       delta <- changes[["delta"]][1]
       by_subject[[s]] <- paste0(
         "**", lbl, ":** ", trend_arrow(delta), " ", trend_desc(delta),
-        " (", first_yr, " → ", last_yr, ")"
+        " (", first_yr, " \u2192 ", last_yr, ")"
       )
     } else {
       grade_bullets <- vapply(seq_len(nrow(changes)), function(i) {
@@ -561,7 +563,7 @@ summarize_score_trends <- function(score_summary, assessment_spec,
         delta <- changes[["delta"]][i]
         g_lbl <- if (is.na(g)) "" else paste0("Grade ", g)
         paste0("* ", g_lbl, ": ", trend_arrow(delta), " ", trend_desc(delta),
-               " (", first_yr, " → ", last_yr, ")")
+               " (", first_yr, " \u2192 ", last_yr, ")")
       }, character(1))
       by_subject[[s]] <- paste0(
         "**", lbl, "**\n\n",

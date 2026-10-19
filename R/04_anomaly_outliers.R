@@ -267,6 +267,10 @@ plot_outliers <- function(outlier_table, assessment_spec) {
           "EOC",
           paste0("Grade ", .data[["GRADE"]])
         ),
+        grade_lbl  = factor(
+          .data[["grade_lbl"]],
+          levels = unique(.data[["grade_lbl"]][order(.data[["GRADE"]])])
+        ),
         # Year-pair label: "2014-2015" meaning change from 2014 to 2015
         year_pair  = paste0(.data[["YEAR"]] - 1L, "\u2013", .data[["YEAR"]]),
         point_type = dplyr::case_when(

@@ -63,91 +63,10 @@ source(file.path(PKG_ROOT, "states/_config.R"))
   invisible(NULL)
 }
 
-# Helper: write named list of data frames to xlsx (silently skipped if openxlsx absent)
-.write_xlsx <- function(sheet_list, path) {
+# Helper: write every table in a results list to xlsx (skipped if openxlsx absent)
+.write_xlsx <- function(results, path) {
   if (!requireNamespace("openxlsx", quietly = TRUE)) return(invisible(NULL))
-  openxlsx::write.xlsx(sheet_list, file = path, overwrite = TRUE)
-  message("  Excel:  ", path)
-}
-
-# Abbreviation lookup: long slot-path segment names → short forms (≤16 chars each).
-# Applied by .shorten_sheet_name before the 31-char Excel tab-name limit is enforced.
-.seg_abbr <- c(
-  # general trend
-  achievement_transitions          = "ach_trans",
-  summary_table                    = "summ_tbl",
-  long_table                       = "long_tbl",
-  comparisons                      = "comp",
-  # anomaly
-  score_integrity                  = "score_integ",
-  distributions                    = "distrib",
-  invalid_records                  = "invalid_recs",
-  mismatch_records                 = "mismatch_recs",
-  # enrollment
-  score_enrollment_trends          = "score_enrl_trends",
-  by_school_subgroup               = "by_school_sg",
-  # cohort
-  crosssectional                   = "cross_sect",
-  mobility_by_achiev               = "mob_by_achiev",
-  enrollment_diag                  = "enroll_diag",
-  # aggregate
-  performance_trends               = "perf_trends",
-  school_level_summary             = "school_lvl_summ",
-  district_level_summary           = "dist_lvl_summ",
-  improvement_classification       = "impr_class",
-  year_to_year_correlations        = "yr_yr_corr",
-  rank_order_data                  = "rank_order",
-  regression_slopes                = "reg_slopes",
-  population_shifts                = "pop_shifts",
-  school_demographic_composition   = "school_demo_comp",
-  district_demographic_composition = "dist_demo_comp",
-  demographic_trend_slopes         = "demo_trend_slopes",
-  composition_proficiency_join     = "comp_prof_join",
-  disaggregated                    = "disagg",
-  residual_model_results           = "resid_model",
-  positive_outlier_schools         = "pos_outlier_schl",
-  negative_outlier_schools         = "neg_outlier_schl",
-  outlier_stability                = "outlier_stab",
-  funnel_plot_data                 = "funnel_data",
-  school_subgroup_proficiency      = "school_sg_prof",
-  district_subgroup_proficiency    = "dist_sg_prof",
-  within_school_gaps               = "within_schl_gaps",
-  subgroup_vs_state_comparison     = "sg_vs_state",
-  gap_trend_classification         = "gap_trend_class",
-  correlation_flag_summary         = "corr_flag_summ"
-)
-
-# Convert a dot-separated slot path to a readable Excel sheet name (≤ 31 chars).
-# First abbreviates known long segment names, then left-truncates as a last resort.
-.shorten_sheet_name <- function(path, max_len = 31L) {
-  segs <- strsplit(path, ".", fixed = TRUE)[[1]]
-  segs <- ifelse(segs %in% names(.seg_abbr), .seg_abbr[segs], segs)
-  nm   <- paste(segs, collapse = ".")
-  if (nchar(nm) > max_len)
-    nm <- substr(nm, nchar(nm) - max_len + 1L, nchar(nm))
-  nm
-}
-
-# Helper: recursively collect every data-frame-valued leaf in a results list into
-# a named list suitable for .write_xlsx(). Sheet names are the slot path (dots as
-# separators), shortened to Excel's 31-char limit via .shorten_sheet_name().
-.collect_df_sheets <- function(obj, prefix = "") {
-  if (inherits(obj, "gg"))             return(list())   # ggplot — skip
-  if (is.data.frame(obj)) {
-    if (!nzchar(prefix) || nrow(obj) == 0L) return(list())
-    nm <- .shorten_sheet_name(prefix)
-    return(stats::setNames(list(obj), nm))
-  }
-  if (!is.list(obj)) return(list())                     # atomic / NULL — skip
-  out <- list()
-  for (nm in names(obj)) {
-    if (is.null(nm) || !nzchar(nm)) next
-    child <- obj[[nm]]
-    if (is.null(child)) next
-    full <- if (nzchar(prefix)) paste0(prefix, ".", nm) else nm
-    out <- c(out, .collect_df_sheets(child, full))
-  }
-  out
+  export_tables_to_excel(results, path)
 }
 
 # -----------------------------------------------------------------------------
@@ -187,7 +106,7 @@ run_state <- function(state_code,
     rds_path <- file.path(output_dir, "general_trend_results.rds")
     saveRDS(results$trend, rds_path)
     .write_xlsx(
-      .collect_df_sheets(results$trend),
+      results$trend,
       file.path(output_dir, "general_trend_full.xlsx")
     )
     if (render) .render_report("01_General_Trend_Report.qmd", rds_path, output_dir,
@@ -203,7 +122,7 @@ run_state <- function(state_code,
     rds_path <- file.path(output_dir, "enrollment_results.rds")
     saveRDS(results$enrollment, rds_path)
     .write_xlsx(
-      .collect_df_sheets(results$enrollment),
+      results$enrollment,
       file.path(output_dir, "enrollment_full.xlsx")
     )
     if (render) .render_report("01_Enrollment_Trends_Report.qmd", rds_path, output_dir,
@@ -223,7 +142,7 @@ run_state <- function(state_code,
     )
     if (!is.null(results$cohort)) {
       .write_xlsx(
-        .collect_df_sheets(results$cohort),
+        results$cohort,
         file.path(output_dir, "cohort_full.xlsx")
       )
     }
@@ -238,7 +157,7 @@ run_state <- function(state_code,
     rds_path <- file.path(output_dir, "anomaly_results.rds")
     saveRDS(results$anomaly, rds_path)
     .write_xlsx(
-      .collect_df_sheets(results$anomaly),
+      results$anomaly,
       file.path(output_dir, "anomaly_full.xlsx")
     )
     if (render) .render_report("04_Anomaly_Report.qmd", rds_path, output_dir,
@@ -254,7 +173,7 @@ run_state <- function(state_code,
     rds_path <- file.path(output_dir, "aggregate_results.rds")
     saveRDS(results$aggregate, rds_path)
     .write_xlsx(
-      .collect_df_sheets(results$aggregate),
+      results$aggregate,
       file.path(output_dir, "aggregate_full.xlsx")
     )
     if (render) .render_report("05_Aggregate_Analysis_Report.qmd", rds_path, output_dir,
@@ -300,6 +219,6 @@ if (RE_EXPORT_XLSX) {
       next
     }
     message("Re-exporting xlsx for: ", line)
-    .write_xlsx(.collect_df_sheets(readRDS(rds_path)), xlsx_path)
+    .write_xlsx(readRDS(rds_path), xlsx_path)
   }
 }

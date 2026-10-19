@@ -133,7 +133,7 @@ anomaly_results$loss_hoss$plot_loss_cleveland
 
 ### Score Distribution Shape
 
-This section screens each year × subject × grade combination for unusual score distributions using three statistical indicators: standard deviation relative to the score range (flatness), Sarle's bimodality coefficient, and skewness. These are screening tools; flagged cells should be examined in context before drawing conclusions.
+This section screens each year × subject × grade combination for unusual score distributions using three statistical indicators: excess kurtosis (flatness), Sarle's bimodality coefficient, and skewness. These are screening tools; flagged cells should be examined in context before drawing conclusions.
 
 ```{r distributions-narrative, results='asis'}
 #cat(anomaly_results$distributions$text$narrative, sep = "\n\n")

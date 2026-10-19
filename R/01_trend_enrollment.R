@@ -582,7 +582,7 @@ compute_school_score_summary <- function(data, assessment_spec, min_n = 10) {
     dplyr::group_by(dplyr::across(dplyr::all_of(c(school_id_col, "SUBJECT")))) |>
     dplyr::mutate(
       delta_mean = .data[["mean_score"]] - dplyr::lag(.data[["mean_score"]]),
-      year_pair  = paste0(dplyr::lag(.data[["YEAR"]]), "–", .data[["YEAR"]])
+      year_pair  = paste0(dplyr::lag(.data[["YEAR"]]), "\u2013", .data[["YEAR"]])
     ) |>
     dplyr::ungroup() |>
     dplyr::mutate(
@@ -621,7 +621,7 @@ compute_school_score_summary <- function(data, assessment_spec, min_n = 10) {
                         color = "grey50", linewidth = 0.4) +
     ggplot2::facet_wrap(~ SUBJECT, scales = "free") +
     ggplot2::labs(
-      title   = paste("Enrollment Change vs. Mean Score Change —", prog_name),
+      title   = paste("Enrollment Change vs. Mean Score Change \u2014", prog_name),
       x       = "Year-to-Year Change in Enrollment (N)",
       y       = "Year-to-Year Change in Mean Scale Score",
       color   = "Grade",
@@ -828,7 +828,7 @@ plot_enrollment_sankey <- function(transition_table,
   blank_plot <- function(msg) {
     ggplot2::ggplot() +
       ggplot2::labs(
-        title    = paste("Enrollment Composition —", subgroup_var, "—", prog_name),
+        title    = paste("Enrollment Composition \u2014", subgroup_var, "\u2014", prog_name),
         subtitle = msg
       ) +
       ggplot2::theme_bw()
@@ -864,7 +864,7 @@ plot_enrollment_sankey <- function(transition_table,
     ggalluvial::geom_flow(alpha = 0.6) +
     ggalluvial::geom_stratum() +
     ggplot2::labs(
-      title = paste("Enrollment Composition —", subgroup_var, "—", prog_name),
+      title = paste("Enrollment Composition \u2014", subgroup_var, "\u2014", prog_name),
       x     = NULL,
       y     = "Number of Students"
     ) +
@@ -1329,7 +1329,7 @@ run_enrollment_analysis <- function(student_results_long,
       dplyr::group_by(.data[["SUBJECT"]], .data[["GRADE"]]) |>
       dplyr::mutate(
         delta_mean = .data[["mean_score"]] - dplyr::lag(.data[["mean_score"]]),
-        year_pair  = paste0(dplyr::lag(.data[["YEAR"]]), "–", .data[["YEAR"]])
+        year_pair  = paste0(dplyr::lag(.data[["YEAR"]]), "\u2013", .data[["YEAR"]])
       ) |>
       dplyr::ungroup() |>
       dplyr::filter(!is.na(.data[["N_change"]]), !is.na(.data[["delta_mean"]]))

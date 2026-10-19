@@ -64,6 +64,6 @@ results <- run_general_trend_analysis(
 )
 results$score_trends$plot$mean_trend
 results$proficiency$plot$trend
-results$distributions$plot$density[["ELA"]]
+results$distributions$plot$density[["READING"]]
 }
 }

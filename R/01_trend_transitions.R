@@ -325,7 +325,7 @@ plot_transition_alluvial <- function(transition_data, assessment_spec) {
     subj_label_val <- assessment_spec$subjects[[s]]$label
     subj_label <- if (!is.null(subj_label_val)) subj_label_val else s
     grade_str  <- if (is.na(g)) "EOC" else paste0("Grade ", g)
-    title_str  <- paste0(subj_label, " — ", grade_str)
+    title_str  <- paste0(subj_label, " \u2014 ", grade_str)
     key_str    <- paste0(s, "_", if (is.na(g)) "EOC" else g)
 
     p <- ggplot2::ggplot(
@@ -400,7 +400,7 @@ plot_transition_rates <- function(transition_data, assessment_spec,
       grade_lbl   = dplyr::if_else(
         is.na(.data[["GRADE"]]), "EOC", paste0("Grade ", .data[["GRADE"]])
       ),
-      year_pair   = paste0(.data[["YEAR_1"]], "→", .data[["YEAR_2"]]),
+      year_pair   = paste0(.data[["YEAR_1"]], "\u2192", .data[["YEAR_2"]]),
       cell_id     = paste0(.data[["subj_label"]], " ", .data[["grade_lbl"]])
     )
 
@@ -521,7 +521,7 @@ flag_transitions <- function(transition_data, assessment_spec, flag_sd = 1.5) {
     dplyr::filter(!is.na(.data[["flag_type"]])) |>
     dplyr::mutate(
       annotation = sprintf(
-        "%s %s: %s in %s–%s (↑ %.0f%%  → %.0f%%  ↓ %.0f%%).",
+        "%s %s: %s in %s\u2013%s (\u2191 %.0f%%  \u2192 %.0f%%  \u2193 %.0f%%).",
         .data[["subj_label"]], .data[["grade_lbl"]], .data[["flag_type"]],
         .data[["YEAR_1"]], .data[["YEAR_2"]],
         .data[["pct_up"]] * 100, .data[["pct_stable"]] * 100,
@@ -570,7 +570,7 @@ flag_transitions <- function(transition_data, assessment_spec, flag_sd = 1.5) {
         flag_dir   = dplyr::if_else(.data[["z_cell"]] > 0,
                                      "unusually high", "unusually low"),
         annotation = sprintf(
-          "%s %s: %s→%s transition was %s in %s–%s (%.0f%%; typical: %.0f%%).",
+          "%s %s: %s\u2192%s transition was %s in %s\u2013%s (%.0f%%; typical: %.0f%%).",
           .data[["subj_label"]], .data[["grade_lbl"]],
           as.character(.data[["from_level"]]),
           as.character(.data[["to_level"]]),
@@ -603,14 +603,14 @@ flag_transitions <- function(transition_data, assessment_spec, flag_sd = 1.5) {
   if (has_summary_flags) {
     bullets <- paste0("- ", flagged_summary[["annotation"]], collapse = "\n")
     narrative_parts <- c(narrative_parts, paste0(
-      "**Direction rate flags** (>±", flag_sd, " SD from typical):\n\n", bullets
+      "**Direction rate flags** (>\u00b1", flag_sd, " SD from typical):\n\n", bullets
     ))
   }
 
   if (has_cell_flags) {
     bullets <- paste0("- ", cell_flags[["annotation"]], collapse = "\n")
     narrative_parts <- c(narrative_parts, paste0(
-      "**Individual transition cell flags** (specific from→to level, >±",
+      "**Individual transition cell flags** (specific from\u2192to level, >\u00b1",
       flag_sd, " SD from typical for that transition):\n\n", bullets
     ))
   }
@@ -757,12 +757,12 @@ compute_transition_comparisons <- function(transition_data,
       }, character(1)),
       annotation = dplyr::case_when(
         .data[["divergence_flag"]] == "mean_diverges" ~ sprintf(
-          "Mean scale score %s in %s %s %s–%s, but net transition rate was %s.",
+          "Mean scale score %s in %s %s %s\u2013%s, but net transition rate was %s.",
           .data[["dir_mean"]], .data[["subj_label"]], .data[["grade_lbl"]],
           .data[["YEAR_1"]], .data[["YEAR_2"]], .data[["dir_net"]]
         ),
         TRUE ~ sprintf(
-          "Percent proficient %s in %s %s %s–%s, but net transition rate was %s.",
+          "Percent proficient %s in %s %s %s\u2013%s, but net transition rate was %s.",
           .data[["dir_prof"]], .data[["subj_label"]], .data[["grade_lbl"]],
           .data[["YEAR_1"]], .data[["YEAR_2"]], .data[["dir_net"]]
         )
@@ -848,7 +848,7 @@ plot_transition_comparisons <- function(comparisons, assessment_spec) {
 
   dat <- dat |>
     dplyr::mutate(
-      year_pair = paste0(.data[["YEAR_1"]], "→", .data[["YEAR_2"]])
+      year_pair = paste0(.data[["YEAR_1"]], "\u2192", .data[["YEAR_2"]])
     )
 
   # Change in % Proficient vs. Change in Mean Scale Score (no transition axis)
@@ -891,6 +891,8 @@ plot_transition_comparisons <- function(comparisons, assessment_spec) {
 #'
 #' @param transition_data Named list returned by [compute_transitions()].
 #' @param assessment_spec Named list describing the assessment program.
+#' @param flags Optional named list returned by [flag_transitions()]. Year pairs
+#'   in its `$table` are marked "(flagged)" in the narrative. Default `NULL`.
 #'
 #' @return A named list with `$narrative` (markdown character string).
 #' @export

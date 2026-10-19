@@ -83,6 +83,12 @@ NULL
   "Exiting"    = "#d62728"
 )
 
+# Grade axis labels ("G3", ..., "G10") as a factor in numeric order; plain
+# character labels sort alphabetically and put G10 before G3.
+.grade_chr <- function(grade) {
+  factor(paste0("G", grade), levels = paste0("G", sort(unique(grade))))
+}
+
 # ==============================================================================
 # Package-level ggplot builders (.build_*) — defined outside compute/plot
 # functions so their environments never hold student_results_long
@@ -233,7 +239,7 @@ NULL
     ggplot2::geom_point(size = 2.5, color = "steelblue") +
     ggplot2::geom_text(size = 2.5, vjust = -0.6, show.legend = FALSE) +
     ggplot2::geom_vline(xintercept = 0, linetype = "dashed", color = "grey60") +
-    ggplot2::facet_wrap(~ paste0("G", GRADE_X, "→G", GRADE_Y)) +
+    ggplot2::facet_wrap(~ paste0("G", GRADE_X, "\u2192G", GRADE_Y)) +
     ggplot2::labs(title = subj_label,
                   x = "Pearson r (adjacent-grade scale scores)", y = "N") +
     .theme_cohort()
@@ -1152,7 +1158,7 @@ compute_enrollment_diagnostics <- function(student_results_long, assessment_spec
   if (n_flagged == 0L) {
     narrative <- paste0(
       "No enrollment cells were flagged as unusually large or small ",
-      "(threshold: ±", flag_sd, " SD from each grade's mean enrollment)."
+      "(threshold: \u00b1", flag_sd, " SD from each grade's mean enrollment)."
     )
   } else {
     flagged_rows <- tbl[!is.na(tbl[["FLAGGED"]]) & tbl[["FLAGGED"]], ]
@@ -1163,7 +1169,7 @@ compute_enrollment_diagnostics <- function(student_results_long, assessment_spec
       collapse = "\n"
     )
     narrative <- paste0(
-      n_flagged, " enrollment cell(s) flagged (>±", flag_sd,
+      n_flagged, " enrollment cell(s) flagged (>\u00b1", flag_sd,
       " SD from grade mean):\n\n", bullets
     )
   }
@@ -1203,7 +1209,7 @@ plot_cohort_mean_scores <- function(cohort_summary, assessment_spec,
     d <- cohort_summary[cohort_summary[["SUBJECT"]] == s &
                         !is.na(cohort_summary[["MEAN_SCORE"]]), ]
     if (nrow(d) == 0L) return(NULL)
-    d[["GRADE_CHR"]]    <- paste0("G", d[["GRADE"]])
+    d[["GRADE_CHR"]]    <- .grade_chr(d[["GRADE"]])
     d[["COHORT_YR_CHR"]] <- as.character(d[["COHORT_YEAR"]])
 
     lh_s   <- lh[lh[["SUBJECT"]] == s, ]
@@ -1217,7 +1223,7 @@ plot_cohort_mean_scores <- function(cohort_summary, assessment_spec,
       cs_df <- crosssectional[crosssectional[["SUBJECT"]] == s &
                               !is.na(crosssectional[["MEAN_SCORE"]]), ]
       if (nrow(cs_df) > 0L) {
-        cs_df[["GRADE_CHR"]] <- paste0("G", cs_df[["GRADE"]])
+        cs_df[["GRADE_CHR"]] <- .grade_chr(cs_df[["GRADE"]])
       } else {
         cs_df <- NULL
       }
@@ -1250,7 +1256,7 @@ plot_cohort_proficiency_rates <- function(cohort_summary, assessment_spec) {
     d <- cohort_summary[cohort_summary[["SUBJECT"]] == s &
                         !is.na(cohort_summary[["PCT_PROFICIENT"]]), ]
     if (nrow(d) == 0L) return(NULL)
-    d[["GRADE_CHR"]]     <- paste0("G", d[["GRADE"]])
+    d[["GRADE_CHR"]]     <- .grade_chr(d[["GRADE"]])
     d[["COHORT_YR_CHR"]] <- as.character(d[["COHORT_YEAR"]])
     lbl <- subj_lookup[["subj_label"]][subj_lookup[["SUBJECT"]] == s]
     if (length(lbl) == 0L) lbl <- s
@@ -1281,7 +1287,7 @@ plot_cohort_score_distributions <- function(cohort_summary, assessment_spec) {
     d <- cohort_summary[cohort_summary[["SUBJECT"]] == s &
                         !is.na(cohort_summary[["MEDIAN_SCORE"]]), ]
     if (nrow(d) == 0L) return(NULL)
-    d[["GRADE_CHR"]]     <- paste0("G", d[["GRADE"]])
+    d[["GRADE_CHR"]]     <- .grade_chr(d[["GRADE"]])
     d[["COHORT_YR_CHR"]] <- as.character(d[["COHORT_YEAR"]])
     iqr <- d[["Q3_SCORE"]] - d[["Q1_SCORE"]]
     d[["IQR_LO"]]  <- d[["Q1_SCORE"]] - 1.5 * iqr
@@ -1417,7 +1423,7 @@ plot_mobility_distribution <- function(mobility_df, assessment_spec) {
   setNames(lapply(subjects, function(s) {
     d <- mobility_df[mobility_df[["SUBJECT"]] == s & !is.na(mobility_df[["PCT"]]), ]
     if (nrow(d) == 0L) return(NULL)
-    d[["GRADE_CHR"]]     <- paste0("G", d[["TO_GRADE"]])
+    d[["GRADE_CHR"]]     <- .grade_chr(d[["TO_GRADE"]])
     d[["COHORT_YR_CHR"]] <- as.character(d[["COHORT_YEAR"]])
     lbl <- assessment_spec$subjects[[s]]$label
     if (is.null(lbl)) lbl <- s
@@ -1494,7 +1500,7 @@ summarize_cohort_analysis <- function(cohort_summary, transition_df, roc_df,
 
     paste0(lbl, ": ", n_cohorts, " cohort(s) tracked across ",
            n_grades, " grade(s) (Grades ",
-           min(grades), "–", max(grades), ").")
+           min(grades), "\u2013", max(grades), ").")
   }), subjects)
 
   # ROC summary

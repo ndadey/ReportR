@@ -40,7 +40,7 @@
 #' )
 #' results$score_trends$plot$mean_trend
 #' results$proficiency$plot$trend
-#' results$distributions$plot$density[["ELA"]]
+#' results$distributions$plot$density[["READING"]]
 #' }
 run_general_trend_analysis <- function(student_results_long,
                                        assessment_spec,

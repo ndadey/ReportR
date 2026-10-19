@@ -10,6 +10,9 @@ summarize_transition_findings(transition_data, assessment_spec, flags = NULL)
 \item{transition_data}{Named list returned by \code{\link[=compute_transitions]{compute_transitions()}}.}
 
 \item{assessment_spec}{Named list describing the assessment program.}
+
+\item{flags}{Optional named list returned by \code{\link[=flag_transitions]{flag_transitions()}}. Year pairs
+in its \verb{$table} are marked "(flagged)" in the narrative. Default \code{NULL}.}
 }
 \value{
 A named list with \verb{$narrative} (markdown character string).

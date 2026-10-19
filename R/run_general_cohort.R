@@ -70,6 +70,11 @@ run_general_cohort <- function(student_results_long,
   message("RDS saved to: ", rds_path)
 
   # --- 4. Render report (optional) -----------------------------------------
+  if (render_report && !requireNamespace("quarto", quietly = TRUE)) {
+    warning("The 'quarto' package is required to render the report; ",
+            "skipping render. Install it with install.packages('quarto').")
+    render_report <- FALSE
+  }
   if (render_report) {
     # Prefer source-tree template so edits are picked up without reinstalling
     pkg_root <- tryCatch(find.package("ReportR"), error = function(e) NULL)
