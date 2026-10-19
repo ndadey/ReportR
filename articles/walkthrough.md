@@ -281,27 +281,12 @@ cat(general_trend_results$score_trends$text$narrative)
 
 Changes in mean scale scores from 2020 to 2024:
 
-**Mathematics**
-
-- Grade 3: ↓ 2.6 points (2020 → 2024)
-- Grade 4: ↑ 11.1 points (2020 → 2024)
-- Grade 5: ↓ 8.6 points (2020 → 2024)
-- Grade 6: ↑ 1.7 points (2020 → 2024)
-- Grade 7: ↑ 9.9 points (2020 → 2024)
-- Grade 8: ↑ 8.3 points (2020 → 2024)
-- Grade 9: → 0.9 points (relatively flat) (2020 → 2024)
-- Grade 10: ↑ 4.7 points (2020 → 2024)
-
-**Reading**
-
-- Grade 3: ↓ 1.2 points (2020 → 2024)
-- Grade 4: → 0.5 points (relatively flat) (2020 → 2024)
-- Grade 5: ↓ 5.2 points (2020 → 2024)
-- Grade 6: ↑ 4.1 points (2020 → 2024)
-- Grade 7: ↑ 2.7 points (2020 → 2024)
-- Grade 8: → 0.9 points (relatively flat) (2020 → 2024)
-- Grade 9: ↑ 1.1 points (2020 → 2024)
-- Grade 10: ↑ 6.9 points (2020 → 2024)
+- **Mathematics:** up in 5 of 8 grades, most in grade 4 (+11.1 points);
+  down in grades 3 and 5, most in grade 5 (−8.6 points); relatively flat
+  in grade 9.
+- **Reading:** up in 4 of 8 grades, most in grade 10 (+6.9 points); down
+  in grades 3 and 5, most in grade 5 (−5.2 points); relatively flat in
+  grades 4 and 8.
 
 ### Proficiency and achievement-level transitions
 

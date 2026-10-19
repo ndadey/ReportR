@@ -1,12 +1,14 @@
 # Summarize distribution shape findings
 
-Returns a narrative, by-subject summary, and the full distribution table
-describing any unusual score distribution shapes detected.
+Returns a short narrative, by-subject counts, and the full distribution
+table. The narrative counts flagged cells by type and subject and names
+the subject-grades flagged in most years; individual cells are left to
+the table.
 
 ## Usage
 
 ``` r
-summarize_distributions(distribution_table)
+summarize_distributions(distribution_table, assessment_spec = NULL)
 ```
 
 ## Arguments
@@ -16,17 +18,22 @@ summarize_distributions(distribution_table)
   Data frame returned by
   [`compute_distributions()`](https://ndadey.github.io/ReportR/reference/compute_distributions.md).
 
+- assessment_spec:
+
+  Optional named list describing the assessment program, used for
+  subject labels. Default `NULL` (subject codes are used).
+
 ## Value
 
 A named list with `$table` (the full distribution table), `$by_subject`
-(flagged cell counts by SUBJECT and flag type), and `$narrative`
-(character vector of 1–3 sentences).
+(flagged cell counts by SUBJECT and flag type), and `$narrative` (a
+short markdown paragraph).
 
 ## Examples
 
 ``` r
 if (FALSE) { # \dontrun{
 tbl <- compute_distributions(demo_data, assessment_spec)
-summarize_distributions(tbl)
+summarize_distributions(tbl, assessment_spec)
 } # }
 ```

@@ -70,7 +70,7 @@ Systemwide performance over time.
 - [`compute_transitions()`](https://ndadey.github.io/ReportR/reference/compute_transitions.md)
   : Compute year-to-year achievement level transition tables
 - [`flag_transitions()`](https://ndadey.github.io/ReportR/reference/flag_transitions.md)
-  : Flag normatively large achievement level transitions
+  : Flag unusual achievement level transitions
 - [`compute_transition_comparisons()`](https://ndadey.github.io/ReportR/reference/compute_transition_comparisons.md)
   : Compare transition patterns to mean score and proficiency trends
 - [`plot_transition_heatmaps()`](https://ndadey.github.io/ReportR/reference/plot_transition_heatmaps.md)

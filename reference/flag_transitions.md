@@ -1,9 +1,13 @@
-# Flag normatively large achievement level transitions
+# Flag unusual achievement level transitions
 
-Computes z-scores for `total_transition_rate` and `net_upward_rate`
-across all SUBJECT × GRADE × year-pair cells and flags those beyond
-`flag_sd` standard deviations. Generates a plain-language annotation for
-each flag.
+Compares each subject x grade x year pair with the same subject and
+grade's other year pairs. For each rate (up, stable, down) and each
+from-to level share, the difference from the other years' average is
+divided by the standard deviation of such differences across all
+subjects and grades, and differences beyond `flag_sd` are flagged.
+Comparing within subject and grade keeps stable differences between
+grades from being flagged every year; pooling the standard deviation
+keeps the test usable with only a few year pairs.
 
 ## Usage
 
@@ -30,6 +34,10 @@ flag_transitions(transition_data, assessment_spec, flag_sd = 1.5)
 
 A named list:
 
-- `$table` — flagged cells with z-scores and annotations
+- `$table` — flagged subject x grade x year pairs, with observed
+  (`pct_*`) and typical (`typical_*`) rates, z-scores, and annotations
 
-- `$narrative` — markdown summary of flags
+- `$table_cells` — flagged from-to level shares; `mean_prop` is the
+  typical share in the same subject and grade's other year pairs
+
+- `$narrative` — markdown summary naming the largest flags

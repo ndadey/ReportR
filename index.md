@@ -85,8 +85,10 @@ Most sub-analyses share the same three parts:
     └── $achievement_transitions
 
 The narratives are written from the results themselves, for example
-*“Grade 4: ↑ 11.1 points (2020 → 2024)”*, so the report text always
-matches the numbers.
+*“Mathematics: up in 5 of 8 grades, most in grade 4 (+11.1 points)”*, so
+the report text always matches the numbers. They lead with what changed
+and name only the largest movers; full detail stays in the tables beside
+them.
 
 ## Built to work across states
 

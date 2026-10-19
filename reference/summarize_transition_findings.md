@@ -23,9 +23,11 @@ summarize_transition_findings(transition_data, assessment_spec, flags = NULL)
 
   Optional named list returned by
   [`flag_transitions()`](https://ndadey.github.io/ReportR/reference/flag_transitions.md).
-  Year pairs in its `$table` are marked "(flagged)" in the narrative.
-  Default `NULL`.
+  When supplied, the number of flagged grade-year combinations is noted
+  for each subject. Default `NULL`.
 
 ## Value
 
-A named list with `$narrative` (markdown character string).
+A named list with `$narrative`: one markdown bullet per subject giving
+the average shares that stayed, moved up, and moved down, plus the most
+extreme grade-year combinations.
