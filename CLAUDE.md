@@ -36,8 +36,9 @@ or adopt the family naming until the user confirms.
 
 ## 2. Current Package State
 
-`devtools::check()` passes with 0 errors, 0 warnings. The one recurring NOTE
-("unable to verify current time") is a network/firewall issue and is not fixable.
+`devtools::check()` baseline (2026-10-19): **0 errors, 0 warnings, 0 notes**. Keep it
+that way: any new warning or note is a regression. The only acceptable exception is
+the intermittent NOTE "unable to verify current time", a network/firewall issue.
 All R files live flat in `R/` (R packages do not auto-load subdirectories).
 The `dev/` folder contains test scripts and prompt files — not part of the package.
 
@@ -71,7 +72,7 @@ devtools::install_github("ndadey/ReportR")
 | `inst/templates/01_General_Trend_Report.qmd` | ✅ Complete | Full report template for Line 1 |
 | `inst/specs/00_MS_Assessment_Spec.R` | ✅ Complete | Mississippi MAAP (5 levels) — nested scale_scores structure |
 | `inst/specs/00_AR_Assessment_Spec.R` | ✅ Complete | Arkansas ATLAS (4 levels) — nested scale_scores structure |
-| `inst/specs/00_DEMO_Assessment_Spec.R` | ✅ Complete | SGPdata demo (4 levels) — nested scale_scores structure |
+| `inst/specs/00_DEMO_Assessment_Spec.R` | ✅ Complete | SGPdata 28 demo (4 levels): READING + MATHEMATICS, grades 3–10, 2020–2024; LOSS/HOSS and cuts from `SGP::SGPstateData[["DEMO"]]` |
 | `inst/specs/00_TEMPLATE_Spec.R` | ✅ Complete | Blank template for new states |
 | `inst/examples/workshop_anomaly_analysis.R` | ✅ Complete | Step-by-step walkthrough for Line 4 (demo data; installed with the package) |
 | `inst/examples/workshop_general_trend_analysis.R` | ✅ Complete | Step-by-step walkthrough for Line 1 (demo data; installed with the package) |
@@ -90,6 +91,9 @@ devtools::install_github("ndadey/ReportR")
 | `internal/workshop_archive/` | 🗄 Archived | Superseded per-line MS MAAP driver scripts (`MS_workshop_*.R`), replaced by `run/run_state.R`; not installed |
 | `README.md` | ✅ Complete | Install instructions, quick start, package overview |
 | `ARCHITECTURE.md` | 📝 Planning doc | `stateR` package-family architecture; contains `[PROPOSED — CONFIRM]` items |
+| `_pkgdown.yml`, `pkgdown/` | ✅ Complete | pkgdown site config, home page (`pkgdown/index.md`), and `extra.css` (see Section 9b) |
+| `vignettes/articles/walkthrough.Rmd` | ✅ Complete | Site-only walkthrough article; runs every line on SGPdata at build time |
+| `.github/workflows/pkgdown.yaml` | ✅ Complete | Builds the site on every push to `main` and deploys it to `gh-pages` |
 
 ### What is not yet built
 
@@ -164,24 +168,28 @@ file.remove(qmd_local)
 `system.file()` only if that is missing, so template edits take effect without
 reinstalling the package.
 
-### Excel export (`run_state.R`)
+### Excel export
 
-Each line writes `<line>_full.xlsx` (e.g. `general_trend_full.xlsx`) next to its RDS.
-`.collect_df_sheets()` walks the results list recursively and writes **every non-empty
-data frame** as its own sheet; ggplot objects and atomic values are skipped. Sheet
-names are the slot path joined with `.` and shortened to Excel's 31-character limit
-by `.shorten_sheet_name()`, which abbreviates segments via the `.seg_abbr` lookup
-(e.g. `achievement_transitions` → `ach_trans`) before left-truncating as a last
-resort. **When you add a results slot with a long name, add an entry to `.seg_abbr`**
-so its tab name stays readable.
+`export_tables_to_excel()` (`R/export_tables.R`) writes **every non-empty data frame**
+in a results list to its own sheet; plots and atomic values are skipped. Sheet names
+are the slot path joined with `.` (e.g. `loss_hoss.table`), made to fit Excel's
+31-character limit by `.shorten_sheet_name()`:
+1. abbreviate known segments via the `.seg_abbr` lookup
+   (e.g. `achievement_transitions` → `ach_trans`, `transitions` → `trans`);
+2. replace characters Excel does not allow with `_`;
+3. if still too long, trim the longest segment, so every path level stays visible.
+
+`.dedupe_sheet_names()` then makes names unique ignoring case (`_2`, `_3`, ...).
+**When you add a results slot with a long name, add an entry to `.seg_abbr`** so its
+tab name stays readable.
+
+`run_state.R` calls `export_tables_to_excel()` for each line and writes
+`<line>_full.xlsx` (e.g. `general_trend_full.xlsx`) next to its RDS.
 
 **Re-export without re-running analysis:** set `RE_EXPORT_XLSX <- TRUE` and
 `RE_EXPORT_LINES` to the line(s) wanted, then source the file. `run_state()` is
 skipped; the existing RDS files in the state's output directory are read and the
 xlsx files rewritten. The cohort RDS lives at `cohort/cohort_results.rds`.
-
-`R/export_tables.R` also exports `export_tables_to_excel()`, a package-level
-equivalent with `__`-joined sheet names; `run_state.R` does not use it.
 
 ---
 
@@ -376,7 +384,7 @@ itself returns `plot_distributions = NULL` — the orchestrator fills it in.
 ```r
 plot_loss_hoss_distributions(student_results_long, assessment_spec, loss_hoss_table,
                               distribution_table = NULL, point_adjust = 5,
-                              x_margin = 10, max_n_density = 5000L)
+                              x_margin = 10)
 ```
 Uses a package-level helper `.build_lh_density_plot()` and pre-computes kernel density
 statistics (512 points per year) to avoid storing raw student data in ggplot objects.
@@ -386,7 +394,10 @@ statistics (512 points per year) to avoid storing raw student data in ggplot obj
 See the sub-analysis files for full details. Key patterns:
 - `$score_integrity$invalid_records` and `$mismatch_records` store individual student records
 - Correlations are cohort-style (Grade G → Grade G+1); requires `STUDENT_ID`
-- Distribution flags: Bimodal (BC > 0.555), Skewed (|skewness| > 1.0), Flat (SD < 0.25 × range)
+- Distribution flags (one per cell, in this priority): Bimodal (Sarle's BC > 0.555),
+  Skewed (|skewness| > 1.0), Flat (excess kurtosis < -1.0; uniform = -1.2, normal = 0).
+  Flat used to be "SD < 0.25 × (HOSS − LOSS)", which is true of nearly every real
+  distribution (normal SD ≈ range/6) and flagged almost every cell — don't reintroduce it.
 - `$distributions$plot$density_flagged` uses `.build_flagged_density_plot()` helper
   (pre-computed density, no raw data in ggplot)
 
@@ -523,8 +534,9 @@ report rendering. This is a **standalone line**, parallel to Line 1 and Line 4
 
 **Key difference from Line 1:** Line 1 tracks population-level trends; Line 1.3
 follows the **same students** (cohorts) across grades using persistent `STUDENT_ID`.
-When `STUDENT_ID`s are not persistent (e.g., the DEMO spec), all STUDENT_ID-dependent
-functions return 0-row data frames without error.
+When `STUDENT_ID`s are not persistent across years, all STUDENT_ID-dependent
+functions return 0-row data frames without error. (The SGPdata demo does have
+persistent IDs, so every cohort analysis runs on it.)
 
 ```r
 run_general_cohort(
@@ -657,7 +669,8 @@ Titled **"Section 1.3. Cohort Composition and Performance"**. Sections:
 9. Score Correlations (guarded)
 Appendix: Full Summary Tables
 
-All STUDENT_ID-dependent sections wrapped in `nrow() > 0` guards for DEMO compatibility.
+All STUDENT_ID-dependent sections wrapped in `nrow() > 0` guards for data without
+persistent student IDs.
 
 ### `inst/templates/01_Enrollment_Trends_Report.qmd`
 Titled **"Section 1.2. Enrollment Trends"**. All tables use years across the top
@@ -712,6 +725,45 @@ if (!is.null(p)) print(p) else cat("*Proficiency trend data not available.*\n")
 - Subsequent chunks read only from the pre-computed results object
 - `flextable` for all tables; `merge_v()` for Subject/Grade columns where appropriate
 - `fig-dpi: 300` in docx format
+
+---
+
+## 9b. Documentation Website
+
+The package site is built with **pkgdown** and published by GitHub Pages at
+**https://ndadey.github.io/ReportR/** from the `gh-pages` branch.
+
+| Page | Source |
+|---|---|
+| Home | `pkgdown/index.md` (the site's home; `README.md` stays the GitHub landing page) |
+| Walkthrough | `vignettes/articles/walkthrough.Rmd` — a pkgdown *article*, not a package vignette, so it never runs during `R CMD check` |
+| Reference | `man/*.Rd`, grouped by line of analysis in `_pkgdown.yml` |
+| Styles | `pkgdown/extra.css` (`.rr-flow` step cards, `.rr-narrative` boxes, `.rr-scroll` wide tables) |
+
+**Deployment:** `.github/workflows/pkgdown.yaml` runs on every push to `main`: it
+installs the package and its Suggests, builds the site, and pushes `docs/` to
+`gh-pages`. Never commit `docs/` (it is gitignored).
+
+**Rules for the site:**
+- **Every new exported function must be added to `reference:` in `_pkgdown.yml`**, or
+  the build fails ("topics missing from index").
+- **pkgdown publishes every `.md` file in the repo root.** The workflow deletes all root
+  `.md` files except README, NEWS, and LICENSE before building, which keeps
+  `CLAUDE.md` and `ARCHITECTURE.md` off the site. Keep that step.
+- The walkthrough executes real code on `sgpData_LONG` in CI (about 3–4 minutes). If
+  it errors, the deploy fails and the previous site stays up.
+- Articles are referenced as `articles/<name>` in `_pkgdown.yml`.
+
+**Building locally (Windows):**
+- Set `RSTUDIO_PANDOC` to Quarto's bundled pandoc
+  (`.../Quarto/bin/tools`) when running outside RStudio.
+- Run `devtools::document()` and `pkgdown::build_site()` in **separate** R sessions.
+  If the package is already loaded, pkgdown cannot install the fresh copy and silently
+  falls back to the installed (possibly stale) version.
+- pkgdown fails with "Total path length must be less than PATH_MAX: 260" when the
+  source path is long. Build from a short path if needed.
+- A local build includes `CLAUDE.html` and `ARCHITECTURE.html`; only the CI build
+  removes them.
 
 ---
 
@@ -793,11 +845,19 @@ ReportR/
 │   ├── MS/_setup.R                   ← gitignored: MS data loader + recoding
 │   └── AR/_setup.R                   ← gitignored: AR data loader + recoding
 │
+├── _pkgdown.yml                          ← site config: navbar, reference index groups
+├── pkgdown/                              ← site home page (index.md) + extra.css
+├── vignettes/articles/walkthrough.Rmd    ← site-only article (Rbuildignored)
+├── .github/workflows/pkgdown.yaml        ← builds + deploys the site to gh-pages
+├── docs/                                 ← local site builds only (gitignored)
+│
 ├── man/
 ├── tests/testthat/
 │   ├── test-04_anomaly_loss_hoss.R
 │   ├── test-01_trend_overall.R
 │   ├── test-01_trend_enrollment.R        ← 59 tests for Line 1.2 functions ✅
+│   ├── test-04_anomaly_distributions.R   ← distribution shape flags (synthetic shapes)
+│   ├── test-export_tables.R              ← sheet naming, dedupe, Excel export
 │   └── test-spec_helpers.R               ← get_score_spec(), build_loss_hoss_lookup(),
 │                                            join_score_bounds() (EOC handling)
 └── dev/                                  ← not in git or package (excluded by both)
@@ -906,6 +966,8 @@ Package: ReportR
 Title: Repeatable Analysis Pipeline for State Summative Assessment Data
 Version: 0.1.0
 Authors@R: person("Nathan", "Dadey", email = "ndadey@nciea.org", role = c("aut", "cre"))
+URL: https://ndadey.github.io/ReportR/, https://github.com/ndadey/ReportR
+BugReports: https://github.com/ndadey/ReportR/issues
 Imports:
     dplyr (>= 1.1.0),
     tidyr (>= 1.3.0),
@@ -946,18 +1008,27 @@ library(dplyr)
 
 demo_data <- sgpData_LONG |>
   filter(VALID_CASE == "VALID_CASE") |>
-  standardize_student_results()
+  standardize_student_results() |>
+  filter(!is.na(SCALE_SCORE)) |>
+  mutate(across(c(FRL, EL, IEP, GENDER), ~ sub("^.*: ", "", .x)))
 ```
 
-**Important:** `sgpData_LONG` uses `YYYY_YYYY` year strings (e.g. `"2015_2016"`).
+**Important:** `sgpData_LONG` uses `YYYY_YYYY` year strings (e.g. `"2019_2020"`).
 `standardize_student_results()` converts these to the end year integer automatically.
 Always filter by year AFTER standardizing, not before.
 
-**Limitations of demo data:**
-- No `SCHOOL_ID` or `DISTRICT_ID` — Line 3 cannot be run
-- `VALID_CASE` must be filtered before use
-- Scale score cutpoints in DEMO spec are approximate
-- No persistent student IDs across grades — correlation and transition analyses return 0 rows
+**About the demo data (SGPdata 28.0.0.0):**
+- READING and MATHEMATICS, grades 3–10, years 2020–2024, about 366,000 records after
+  cleanup. Persistent `STUDENT_ID`s, 121 schools, 3 districts — **every line runs**,
+  including cohort, transitions, correlations, and Line 5.
+- Two cleanup steps are required (shown above): drop `"No Score"` records (no scale
+  score), and strip the `"ELL: "`-style prefixes so binary flags read `Yes`/`No`
+  (aggregate code counts `YES`/`Y`/`TRUE`/`1` as yes).
+- The DEMO spec's LOSS/HOSS and cuts come from `SGP::SGPstateData[["DEMO"]]`, converted
+  to ReportR's cut convention (SGP cut − 1). With the cleanup above, score integrity
+  reports 0 out-of-range scores and 0 level mismatches.
+- Line 4 distribution flags on the demo data: 21 of 80 cells Skewed (mostly reading),
+  none Bimodal or Flat.
 
 ### Minimal synthetic data for correlation/transition testing (persistent IDs)
 
@@ -991,8 +1062,8 @@ test_data <- do.call(rbind, lapply(c("ELA", "MATHEMATICS"), function(s) {
 ## 15. Getting Started (for Claude Code in a new session)
 
 1. Read this file completely before touching any code.
-2. Run `devtools::check()` first to confirm the baseline is clean (0 errors, 0 warnings).
-   The persistent NOTE ("unable to verify current time") is a network issue — ignore it.
+2. Run `devtools::check()` first to confirm the baseline is clean (0 errors, 0 warnings,
+   0 notes; see Section 2). Treat anything new as a regression.
 3. Line 4 (Score Quality Analysis) is the canonical template — match its patterns exactly
    when building other modules.
 4. Before adding any new NSE variable to a function, add it to `R/globals.R`.
@@ -1054,7 +1125,24 @@ test_data <- do.call(rbind, lapply(c("ELA", "MATHEMATICS"), function(s) {
 24. **After `pivot_wider()`, add any expected-but-missing category columns** before using
     them. See Section 11.
 25. **New results slots with long names** need an abbreviation in `.seg_abbr` in
-    `run/run_state.R` so their xlsx tab names stay readable. See Section 3.
+    `R/export_tables.R` so their xlsx tab names stay readable. See Section 3.
 26. **Script placement:** scripts that build results lists go in `run/`; archived or
     internal scripts go in `internal/`. Only portable code goes in `inst/`, since it is
     installed with the package. See Section 3.
+27. **Keep the DEMO spec in sync with SGPdata.** The site's walkthrough runs every line
+    on `sgpData_LONG` with the DEMO spec at build time. If an SGPdata release changes
+    subjects, grades, years, or levels, update the spec (values from
+    `SGP::SGPstateData[["DEMO"]]`) and the walkthrough text. See Sections 9b and 14.
+28. **Grade labels in plots must sort numerically.** `paste0("G", grade)` or
+    `paste0("Grade ", grade)` as plain character sorts alphabetically (`G10` before
+    `G3`), which scrambles axes, facets, and legends once grade 10+ is present. Make
+    them factors with levels in numeric grade order (see `.grade_chr()` in
+    `R/01_general_cohort.R`).
+29. **Never put code between a roxygen block and its function.** roxygen attaches a
+    `#'` block to the next object, so a helper inserted in between steals the docs and
+    the `@export`: the helper gets exported and the real function silently does not
+    (this happened to `plot_distributions()` and `plot_loss_hoss_distributions()`).
+    Define `.build_*` helpers above the roxygen block.
+30. **Only ASCII in R code.** Write non-ASCII characters in strings as escapes
+    (`"→"` for →, `"–"` for –, `"±"` for ±); R CMD check warns
+    otherwise. Comments and roxygen text may contain UTF-8.

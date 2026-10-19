@@ -1,0 +1,170 @@
+url: https://ndadey.github.io/ReportR/
+
+template:
+  bootstrap: 5
+  bslib:
+    primary: "#1d4e89"
+    link-color: "#1d4e89"
+
+home:
+  title: "ReportR: Repeatable Analyses of State Summative Assessment Data"
+  description: >
+    Turn one long file of student assessment records and one assessment
+    specification into standard tables, plots, narratives, and Word reports.
+
+navbar:
+  structure:
+    left: [walkthrough, reference]
+    right: [search, github]
+  components:
+    walkthrough:
+      text: Walkthrough
+      href: articles/walkthrough.html
+
+articles:
+- title: Get started
+  navbar: ~
+  contents:
+  - articles/walkthrough
+
+reference:
+- title: Prepare data and describe the assessment
+  desc: >
+    Put student records in the expected long format and look up values from
+    the assessment spec.
+  contents:
+  - standardize_student_results
+  - student_results_long
+  - get_score_spec
+  - join_score_bounds
+  - build_loss_hoss_lookup
+  - benchmark_index
+  - grade_key
+
+- title: "Line 1: General trend"
+  desc: Systemwide performance over time.
+  contents:
+  - run_general_trend_analysis
+- subtitle: Scale score trends
+  contents:
+  - run_score_trends
+  - compute_score_summary
+  - mean_sd_table_wide
+  - plot_score_trends
+  - summarize_score_trends
+- subtitle: Proficiency
+  contents:
+  - run_proficiency
+  - compute_proficiency
+  - plot_proficiency
+  - summarize_proficiency_findings
+- subtitle: Score distributions
+  contents:
+  - run_score_density
+  - plot_score_density
+  - summarize_score_density
+- subtitle: Achievement-level transitions
+  contents:
+  - run_achievement_transitions
+  - compute_transitions
+  - flag_transitions
+  - compute_transition_comparisons
+  - plot_transition_heatmaps
+  - plot_transition_alluvial
+  - plot_transition_rates
+  - plot_transition_comparisons
+  - summarize_transition_findings
+
+- title: "Line 1.2: Enrollment"
+  desc: Who was tested, and how the tested population changed.
+  contents:
+  - run_general_enrollment_analysis
+  - run_enrollment_analysis
+  - compute_enrollment_counts
+  - compute_enrollment_proportions
+  - compute_subgroup_transitions
+  - compute_entry_exit_performance
+  - compute_school_district_enrollment
+  - compute_school_score_summary
+  - plot_enrollment_table
+  - plot_enrollment_sankey
+  - summarize_enrollment
+  - suppress_small_n_enroll
+
+- title: "Line 1.3: Cohort"
+  desc: The same students followed across grades and years.
+  contents:
+  - run_general_cohort
+  - run_cohort_analysis
+  - compute_cohort_summary
+  - compute_cohort_demographics
+  - compute_cohort_transitions
+  - compute_cohort_rate_of_change
+  - compute_cohort_correlations
+  - compute_cohort_vs_crosssectional
+  - compute_cohort_mobility
+  - compute_mobility_by_achievement
+  - compute_cohort_persistence
+  - compute_enrollment_diagnostics
+  - plot_cohort_mean_scores
+  - plot_cohort_proficiency_rates
+  - plot_cohort_score_distributions
+  - plot_cohort_demographic_composition
+  - plot_sankey_transitions
+  - plot_rate_of_change
+  - plot_score_correlations
+  - plot_mobility_distribution
+  - plot_mobility_by_achievement
+  - summarize_cohort_analysis
+
+- title: "Line 4: Score quality"
+  desc: Diagnostic checks for patterns worth investigating before results are shared.
+  contents:
+  - run_anomaly_analysis
+- subtitle: Floor and ceiling pileups (LOSS/HOSS)
+  contents:
+  - run_loss_hoss
+  - compute_loss_hoss_table
+  - plot_loss_hoss_cleveland
+  - plot_loss_hoss_heatmap
+  - plot_loss_hoss_over_time
+  - plot_loss_hoss_distributions
+  - summarize_loss_hoss_findings
+- subtitle: Score integrity
+  contents:
+  - run_score_integrity
+  - compute_score_integrity
+  - plot_score_integrity
+  - summarize_score_integrity
+- subtitle: Year-to-year outliers
+  contents:
+  - run_outliers
+  - compute_outliers
+  - plot_outliers
+  - summarize_outliers
+- subtitle: Cohort correlations
+  contents:
+  - run_correlations
+  - compute_correlations
+  - plot_correlations
+  - summarize_correlations
+- subtitle: Distribution shape
+  contents:
+  - run_distributions
+  - compute_distributions
+  - plot_distributions
+  - summarize_distributions
+
+- title: "Line 5: School and district"
+  desc: School- and district-level performance, variability, and outliers.
+  contents:
+  - run_aggregate_analysis
+  - compute_performance_trends
+  - compute_population_shifts
+  - compute_outlier_schools
+  - compute_school_disaggregated
+  - compute_stability_analysis
+
+- title: Export
+  contents:
+  - export_tables_to_excel

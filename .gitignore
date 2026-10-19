@@ -34,3 +34,6 @@ states/*
 *.rdata
 *.html
 *_files/
+
+# pkgdown site: built by GitHub Actions and published from the gh-pages branch
+docs/

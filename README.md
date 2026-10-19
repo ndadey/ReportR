@@ -5,6 +5,10 @@ ReportR reduces the work of building annual reports for state educational agenci
 by providing a standard set of analyses that can be run with minimal configuration
 changes across different states and years.
 
+**Documentation site:** <https://ndadey.github.io/ReportR/>, including a
+[step-by-step walkthrough](https://ndadey.github.io/ReportR/articles/walkthrough.html)
+on demo data and a reference page for every function.
+
 ## Installation
 
 ```r
@@ -69,10 +73,13 @@ library(ReportR)
 library(SGPdata)
 library(dplyr)
 
-# Load and standardize data (always standardize before filtering by year)
+# Load and standardize data (always standardize before filtering by year),
+# then drop records with no score and strip the "ELL: " style label prefixes
 student_results_long <- sgpData_LONG |>
   filter(VALID_CASE == "VALID_CASE") |>
-  standardize_student_results()
+  standardize_student_results() |>
+  filter(!is.na(SCALE_SCORE)) |>
+  mutate(across(c(FRL, EL, IEP, GENDER), ~ sub("^.*: ", "", .x)))
 
 # Load spec
 source(system.file("specs/00_DEMO_Assessment_Spec.R", package = "ReportR"))
