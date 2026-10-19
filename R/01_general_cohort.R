@@ -1162,15 +1162,20 @@ compute_enrollment_diagnostics <- function(student_results_long, assessment_spec
     )
   } else {
     flagged_rows <- tbl[!is.na(tbl[["FLAGGED"]]) & tbl[["FLAGGED"]], ]
-    bullets <- paste0(
-      "- ", flagged_rows[["SUBJECT"]], " Grade ", flagged_rows[["GRADE"]],
-      " (", flagged_rows[["YEAR"]], "): N = ", flagged_rows[["N"]],
-      ", z = ", round(flagged_rows[["Z_SCORE"]], 2),
-      collapse = "\n"
+    flagged_rows <- flagged_rows[order(-abs(flagged_rows[["Z_SCORE"]])), ]
+    labels <- vapply(assessment_spec$subjects, function(s) s$label, character(1))
+    subj   <- ifelse(flagged_rows[["SUBJECT"]] %in% names(labels),
+                     labels[flagged_rows[["SUBJECT"]]], flagged_rows[["SUBJECT"]])
+    items <- paste0(
+      .place_label(subj, flagged_rows[["GRADE"]]), ", ", flagged_rows[["YEAR"]],
+      " (N = ", format(flagged_rows[["N"]], big.mark = ",", trim = TRUE),
+      ", z = ", vapply(flagged_rows[["Z_SCORE"]], .fmt_signed, character(1),
+                       digits = 2), ")"
     )
     narrative <- paste0(
-      n_flagged, " enrollment cell(s) flagged (>\u00b1", flag_sd,
-      " SD from grade mean):\n\n", bullets
+      n_flagged, " enrollment ", if (n_flagged == 1L) "cell" else "cells",
+      " differed from their grade's average enrollment by more than ", flag_sd,
+      " SD. ", .top_items_sentence(items)
     )
   }
 

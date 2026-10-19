@@ -504,14 +504,6 @@ summarize_score_trends <- function(score_summary, assessment_spec,
       subj_label = dplyr::coalesce(.data[["subj_label"]], .data[["SUBJECT"]])
     )
 
-  trend_arrow <- function(delta) {
-    if (abs(delta) < flat_threshold) "\u2192" else if (delta > 0) "\u2191" else "\u2193"
-  }
-  trend_desc <- function(delta) {
-    pts <- paste0(round(abs(delta), 1), " points")
-    if (abs(delta) < flat_threshold) paste0(pts, " (relatively flat)") else pts
-  }
-
   all_yrs    <- sort(unique(wide[["YEAR"]]))
   first_yr   <- all_yrs[1]
   last_yr    <- all_yrs[length(all_yrs)]
@@ -549,32 +541,18 @@ summarize_score_trends <- function(score_summary, assessment_spec,
       next
     }
 
-    eoc <- all(is.na(changes[["GRADE"]]))
-
-    if (eoc) {
-      delta <- changes[["delta"]][1]
-      by_subject[[s]] <- paste0(
-        "**", lbl, ":** ", trend_arrow(delta), " ", trend_desc(delta),
-        " (", first_yr, " \u2192 ", last_yr, ")"
-      )
-    } else {
-      grade_bullets <- vapply(seq_len(nrow(changes)), function(i) {
-        g     <- changes[["GRADE"]][i]
-        delta <- changes[["delta"]][i]
-        g_lbl <- if (is.na(g)) "" else paste0("Grade ", g)
-        paste0("* ", g_lbl, ": ", trend_arrow(delta), " ", trend_desc(delta),
-               " (", first_yr, " \u2192 ", last_yr, ")")
-      }, character(1))
-      by_subject[[s]] <- paste0(
-        "**", lbl, "**\n\n",
-        paste(grade_bullets, collapse = "\n")
-      )
-    }
+    eoc    <- all(is.na(changes[["GRADE"]]))
+    grades <- if (eoc) NA else changes[["GRADE"]]
+    deltas <- if (eoc) changes[["delta"]][1] else changes[["delta"]]
+    by_subject[[s]] <- paste0(
+      "**", lbl, ":** ",
+      .change_summary(grades, deltas, flat_threshold, "points"), "."
+    )
   }
 
   narrative <- paste0(
     "Changes in mean scale scores from ", first_yr, " to ", last_yr, ":\n\n",
-    paste(unlist(by_subject), collapse = "\n\n")
+    paste0("- ", unlist(by_subject), collapse = "\n")
   )
 
   list(

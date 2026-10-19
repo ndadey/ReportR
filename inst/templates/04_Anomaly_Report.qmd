@@ -136,7 +136,39 @@ anomaly_results$loss_hoss$plot_loss_cleveland
 This section screens each year × subject × grade combination for unusual score distributions using three statistical indicators: excess kurtosis (flatness), Sarle's bimodality coefficient, and skewness. These are screening tools; flagged cells should be examined in context before drawing conclusions.
 
 ```{r distributions-narrative, results='asis'}
-#cat(anomaly_results$distributions$text$narrative, sep = "\n\n")
+cat(anomaly_results$distributions$text$narrative, sep = "\n\n")
+```
+
+```{r distributions-flagged-table, tab.cap="Year-Subject-Grade Combinations with Unusual Score Distributions"}
+dist_flags <- anomaly_results$distributions$table
+if (!is.null(dist_flags)) {
+  dist_flags <- dist_flags |>
+    dplyr::filter(.data[["distribution_flag"]] != "None")
+  if (!is.null(report_years)) {
+    dist_flags <- dist_flags |> dplyr::filter(.data[["YEAR"]] %in% report_years)
+  }
+}
+if (!is.null(dist_flags) && nrow(dist_flags) > 0) {
+  subj_labels <- vapply(assessment_spec$subjects, function(s) s$label, character(1))
+  dist_flags |>
+    dplyr::arrange(.data[["SUBJECT"]], .data[["GRADE"]], .data[["YEAR"]]) |>
+    dplyr::transmute(
+      Subject  = dplyr::coalesce(unname(subj_labels[.data[["SUBJECT"]]]),
+                                 .data[["SUBJECT"]]),
+      Grade    = dplyr::if_else(is.na(.data[["GRADE"]]), "EOC",
+                                as.character(.data[["GRADE"]])),
+      Year     = as.character(.data[["YEAR"]]),
+      Flag     = .data[["distribution_flag"]],
+      Skewness = round(.data[["skewness"]], 2),
+      `Excess Kurtosis`        = round(.data[["kurtosis"]], 2),
+      `Bimodality Coefficient` = round(.data[["bimodality_coefficient"]], 3)
+    ) |>
+    flextable::flextable() |>
+    flextable::merge_v(j = c("Subject", "Grade")) |>
+    flextable::bold(part = "header") |>
+    flextable::fontsize(size = 9, part = "all") |>
+    flextable::set_table_properties(layout = "autofit", width = 1)
+}
 ```
 
 ### Score Distribution Plots

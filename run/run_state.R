@@ -13,7 +13,7 @@
 PKG_ROOT <- "C:/Users/NathanDadey/CenterforAssessment Dropbox/Nathan Dadey/Git/ReportR"
 
 # ---- User settings ----------------------------------------------------------
-STATE        <- "MS"   # change to "AR", "DEMO", etc.
+STATE        <- "DEMO"   # change to "AR", "DEMO", etc.
 ANALYSES     <- "aggregate" #c("trend", "enrollment", "cohort", "anomaly", "aggregate")
 RENDER       <- TRUE
 MIN_N        <- 10L

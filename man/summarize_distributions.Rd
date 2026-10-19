@@ -4,23 +4,27 @@
 \alias{summarize_distributions}
 \title{Summarize distribution shape findings}
 \usage{
-summarize_distributions(distribution_table)
+summarize_distributions(distribution_table, assessment_spec = NULL)
 }
 \arguments{
 \item{distribution_table}{Data frame returned by \code{\link[=compute_distributions]{compute_distributions()}}.}
+
+\item{assessment_spec}{Optional named list describing the assessment
+program, used for subject labels. Default \code{NULL} (subject codes are used).}
 }
 \value{
 A named list with \verb{$table} (the full distribution table),
 \verb{$by_subject} (flagged cell counts by SUBJECT and flag type), and
-\verb{$narrative} (character vector of 1–3 sentences).
+\verb{$narrative} (a short markdown paragraph).
 }
 \description{
-Returns a narrative, by-subject summary, and the full distribution table
-describing any unusual score distribution shapes detected.
+Returns a short narrative, by-subject counts, and the full distribution
+table. The narrative counts flagged cells by type and subject and names the
+subject-grades flagged in most years; individual cells are left to the table.
 }
 \examples{
 \dontrun{
 tbl <- compute_distributions(demo_data, assessment_spec)
-summarize_distributions(tbl)
+summarize_distributions(tbl, assessment_spec)
 }
 }

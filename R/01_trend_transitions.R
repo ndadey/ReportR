@@ -452,11 +452,16 @@ plot_transition_rates <- function(transition_data, assessment_spec,
 }
 
 
-#' Flag normatively large achievement level transitions
+#' Flag unusual achievement level transitions
 #'
-#' Computes z-scores for `total_transition_rate` and `net_upward_rate` across
-#' all SUBJECT × GRADE × year-pair cells and flags those beyond `flag_sd`
-#' standard deviations. Generates a plain-language annotation for each flag.
+#' Compares each subject x grade x year pair with the same subject and grade's
+#' other year pairs. For each rate (up, stable, down) and each from-to level
+#' share, the difference from the other years' average is divided by the
+#' standard deviation of such differences across all subjects and grades, and
+#' differences beyond `flag_sd` are flagged. Comparing within subject and grade
+#' keeps stable differences between grades from being flagged every year;
+#' pooling the standard deviation keeps the test usable with only a few year
+#' pairs.
 #'
 #' @param transition_data Named list returned by [compute_transitions()].
 #' @param assessment_spec Named list describing the assessment program.
@@ -464,8 +469,11 @@ plot_transition_rates <- function(transition_data, assessment_spec,
 #'   `1.5`.
 #'
 #' @return A named list:
-#'   * `$table`     — flagged cells with z-scores and annotations
-#'   * `$narrative` — markdown summary of flags
+#'   * `$table` — flagged subject x grade x year pairs, with observed
+#'     (`pct_*`) and typical (`typical_*`) rates, z-scores, and annotations
+#'   * `$table_cells` — flagged from-to level shares; `mean_prop` is the typical
+#'     share in the same subject and grade's other year pairs
+#'   * `$narrative` — markdown summary naming the largest flags
 #' @export
 flag_transitions <- function(transition_data, assessment_spec, flag_sd = 1.5) {
   stopifnot(
@@ -494,18 +502,31 @@ flag_transitions <- function(transition_data, assessment_spec, flag_sd = 1.5) {
       pct_down   = dplyr::coalesce(.data[["down"]],   0)
     )
 
-  # Z-score each direction rate across all cells
-  z_flag <- function(x, sd_floor = 1) {
-    m <- mean(x, na.rm = TRUE)
-    s <- stats::sd(x, na.rm = TRUE)
-    (x - m) / if (s > 0) s else sd_floor
+  # With only a few year pairs per grade, a z-score within one grade cannot
+  # pass 1.5, so the SD of the differences is pooled across subjects and grades.
+  loo_mean <- function(x) {
+    n <- sum(!is.na(x))
+    if (n < 2L) return(rep(NA_real_, length(x)))
+    (sum(x, na.rm = TRUE) - x) / (n - 1L)
+  }
+  z_pooled <- function(dev) {
+    s <- stats::sd(dev, na.rm = TRUE)
+    if (is.na(s) || s == 0) return(rep(0, length(dev)))
+    dev / s
   }
 
   tbl <- tbl |>
+    dplyr::group_by(.data[["SUBJECT"]], .data[["GRADE"]]) |>
     dplyr::mutate(
-      z_up     = z_flag(.data[["pct_up"]]),
-      z_stable = z_flag(.data[["pct_stable"]]),
-      z_down   = z_flag(.data[["pct_down"]]),
+      typical_up     = loo_mean(.data[["pct_up"]]),
+      typical_stable = loo_mean(.data[["pct_stable"]]),
+      typical_down   = loo_mean(.data[["pct_down"]])
+    ) |>
+    dplyr::ungroup() |>
+    dplyr::mutate(
+      z_up     = z_pooled(.data[["pct_up"]]     - .data[["typical_up"]]),
+      z_stable = z_pooled(.data[["pct_stable"]] - .data[["typical_stable"]]),
+      z_down   = z_pooled(.data[["pct_down"]]   - .data[["typical_down"]]),
       flag_type = dplyr::case_when(
         .data[["z_up"]]     >=  flag_sd ~ "unusually high upward rate",
         .data[["z_up"]]     <= -flag_sd ~ "unusually low upward rate",
@@ -517,20 +538,38 @@ flag_transitions <- function(transition_data, assessment_spec, flag_sd = 1.5) {
       )
     )
 
+  movement <- c(up = "moved up", down = "moved down",
+                stable = "stayed at the same level")
+
   flagged_summary <- tbl |>
     dplyr::filter(!is.na(.data[["flag_type"]])) |>
     dplyr::mutate(
+      measure = dplyr::case_when(
+        grepl("upward",   .data[["flag_type"]]) ~ "up",
+        grepl("downward", .data[["flag_type"]]) ~ "down",
+        TRUE                                    ~ "stable"
+      ),
+      rate = dplyr::case_when(
+        .data[["measure"]] == "up"   ~ .data[["pct_up"]],
+        .data[["measure"]] == "down" ~ .data[["pct_down"]],
+        TRUE                         ~ .data[["pct_stable"]]
+      ),
+      typical = dplyr::case_when(
+        .data[["measure"]] == "up"   ~ .data[["typical_up"]],
+        .data[["measure"]] == "down" ~ .data[["typical_down"]],
+        TRUE                         ~ .data[["typical_stable"]]
+      ),
       annotation = sprintf(
-        "%s %s: %s in %s\u2013%s (\u2191 %.0f%%  \u2192 %.0f%%  \u2193 %.0f%%).",
-        .data[["subj_label"]], .data[["grade_lbl"]], .data[["flag_type"]],
-        .data[["YEAR_1"]], .data[["YEAR_2"]],
-        .data[["pct_up"]] * 100, .data[["pct_stable"]] * 100,
-        .data[["pct_down"]] * 100
+        "%s, %s\u2013%s: %.0f%% %s (other years: %.0f%%)",
+        .place_label(.data[["subj_label"]], .data[["GRADE"]]),
+        .data[["YEAR_1"]], .data[["YEAR_2"]], .data[["rate"]] * 100,
+        unname(movement[.data[["measure"]]]), .data[["typical"]] * 100
       )
     ) |>
     dplyr::select("SUBJECT", "GRADE", "subj_label", "grade_lbl",
                   "YEAR_1", "YEAR_2", "n_total",
                   "pct_up", "pct_stable", "pct_down",
+                  "typical_up", "typical_stable", "typical_down",
                   "z_up", "z_stable", "z_down",
                   "flag_type", "annotation") |>
     dplyr::arrange(dplyr::desc(
@@ -553,29 +592,26 @@ flag_transitions <- function(transition_data, assessment_spec, flag_sd = 1.5) {
         )
       )
 
-    # Normalize within each from_level × to_level transition type
     cell_flags <- lt |>
+      dplyr::group_by(.data[["SUBJECT"]], .data[["GRADE"]],
+                      .data[["from_level"]], .data[["to_level"]]) |>
+      dplyr::mutate(mean_prop = loo_mean(.data[["prop"]])) |>
       dplyr::group_by(.data[["from_level"]], .data[["to_level"]]) |>
       dplyr::mutate(
-        mean_prop = mean(.data[["prop"]], na.rm = TRUE),
-        sd_prop   = stats::sd(.data[["prop"]], na.rm = TRUE),
-        z_cell    = (.data[["prop"]] - .data[["mean_prop"]]) /
-                      dplyr::if_else(!is.na(.data[["sd_prop"]]) &
-                                       .data[["sd_prop"]] > 0,
-                                     .data[["sd_prop"]], 1)
+        z_cell = z_pooled(.data[["prop"]] - .data[["mean_prop"]])
       ) |>
       dplyr::ungroup() |>
-      dplyr::filter(abs(.data[["z_cell"]]) >= flag_sd) |>
+      dplyr::filter(!is.na(.data[["z_cell"]]),
+                    abs(.data[["z_cell"]]) >= flag_sd) |>
       dplyr::mutate(
         flag_dir   = dplyr::if_else(.data[["z_cell"]] > 0,
                                      "unusually high", "unusually low"),
         annotation = sprintf(
-          "%s %s: %s\u2192%s transition was %s in %s\u2013%s (%.0f%%; typical: %.0f%%).",
-          .data[["subj_label"]], .data[["grade_lbl"]],
+          "%s, %s\u2013%s: %s\u2192%s %.0f%% (other years: %.0f%%)",
+          .place_label(.data[["subj_label"]], .data[["GRADE"]]),
+          .data[["YEAR_1"]], .data[["YEAR_2"]],
           as.character(.data[["from_level"]]),
           as.character(.data[["to_level"]]),
-          .data[["flag_dir"]],
-          .data[["YEAR_1"]], .data[["YEAR_2"]],
           .data[["prop"]] * 100,
           .data[["mean_prop"]] * 100
         )
@@ -583,7 +619,7 @@ flag_transitions <- function(transition_data, assessment_spec, flag_sd = 1.5) {
       dplyr::select("SUBJECT", "GRADE", "subj_label", "grade_lbl",
                     "YEAR_1", "YEAR_2", "from_level", "to_level",
                     "prop", "mean_prop", "z_cell", "flag_dir", "annotation") |>
-      dplyr::arrange(dplyr::desc(abs(.data[["z_cell"]])))
+      dplyr::arrange(dplyr::desc(abs(.data[["prop"]] - .data[["mean_prop"]])))
   }
 
   # --- Narrative ------------------------------------------------------------
@@ -594,24 +630,34 @@ flag_transitions <- function(transition_data, assessment_spec, flag_sd = 1.5) {
     return(list(
       table         = flagged_summary,
       table_cells   = cell_flags,
-      narrative     = "No achievement transition cells were flagged as normatively unusual."
+      narrative     = paste0(
+        "No grade-year combination stood out from the same subject and ",
+        "grade's other years (threshold: ", flag_sd, " SD)."
+      )
     ))
   }
 
   narrative_parts <- character(0)
 
   if (has_summary_flags) {
-    bullets <- paste0("- ", flagged_summary[["annotation"]], collapse = "\n")
+    n_f <- nrow(flagged_summary)
     narrative_parts <- c(narrative_parts, paste0(
-      "**Direction rate flags** (>\u00b1", flag_sd, " SD from typical):\n\n", bullets
+      "**Unusual movement between levels:** ", n_f, " subject-grade-year ",
+      if (n_f == 1L) "combination" else "combinations",
+      " had an up, stable, or down rate more than ", flag_sd,
+      " SD from the same subject and grade's other years. ",
+      .top_items_sentence(flagged_summary[["annotation"]])
     ))
   }
 
   if (has_cell_flags) {
-    bullets <- paste0("- ", cell_flags[["annotation"]], collapse = "\n")
+    n_c <- nrow(cell_flags)
     narrative_parts <- c(narrative_parts, paste0(
-      "**Individual transition cell flags** (specific from\u2192to level, >\u00b1",
-      flag_sd, " SD from typical for that transition):\n\n", bullets
+      "**Unusual level-to-level transitions:** ", n_c, " from-to level ",
+      if (n_c == 1L) "share" else "shares",
+      " differed from the same subject and grade's other years by more than ",
+      flag_sd, " SD. ",
+      .top_items_sentence(cell_flags[["annotation"]])
     ))
   }
 
@@ -891,10 +937,13 @@ plot_transition_comparisons <- function(comparisons, assessment_spec) {
 #'
 #' @param transition_data Named list returned by [compute_transitions()].
 #' @param assessment_spec Named list describing the assessment program.
-#' @param flags Optional named list returned by [flag_transitions()]. Year pairs
-#'   in its `$table` are marked "(flagged)" in the narrative. Default `NULL`.
+#' @param flags Optional named list returned by [flag_transitions()]. When
+#'   supplied, the number of flagged grade-year combinations is noted for each
+#'   subject. Default `NULL`.
 #'
-#' @return A named list with `$narrative` (markdown character string).
+#' @return A named list with `$narrative`: one markdown bullet per subject giving
+#'   the average shares that stayed, moved up, and moved down, plus the most
+#'   extreme grade-year combinations.
 #' @export
 summarize_transition_findings <- function(transition_data, assessment_spec,
                                            flags = NULL) {
@@ -916,13 +965,10 @@ summarize_transition_findings <- function(transition_data, assessment_spec,
     stringsAsFactors = FALSE
   )
 
-  # Build a lookup of flagged summary cells for ⚠ indicators
-  flag_keys <- character(0)
-  if (!is.null(flags) && !is.null(flags$table) && nrow(flags$table) > 0L) {
-    flag_keys <- paste0(flags$table[["SUBJECT"]], "_",
-                        flags$table[["GRADE"]], "_",
-                        flags$table[["YEAR_1"]], "_",
-                        flags$table[["YEAR_2"]])
+  n_flagged <- if (!is.null(flags) && !is.null(flags$table)) {
+    table(flags$table[["SUBJECT"]])
+  } else {
+    integer(0)
   }
 
   tbl <- transition_data$summary_table |>
@@ -937,42 +983,47 @@ summarize_transition_findings <- function(transition_data, assessment_spec,
       pct_down   = dplyr::coalesce(.data[["down"]],   0)
     )
 
-  subjects <- unique(tbl[["SUBJECT"]])
+  pct <- function(x) paste0(round(100 * x), "%")
+  grade_years <- function(r) {
+    years <- paste0(r[["YEAR_1"]], "\u2013", r[["YEAR_2"]])
+    if (is.na(r[["GRADE"]])) years else paste0("grade ", r[["GRADE"]], ", ", years)
+  }
+
+  subjects   <- unique(tbl[["SUBJECT"]])
   by_subject <- vapply(subjects, function(s) {
-    d_s <- tbl |> dplyr::filter(.data[["SUBJECT"]] == s)
-    lbl <- unique(d_s[["subj_label"]])[1L]
+    d <- tbl[tbl[["SUBJECT"]] == s, ]
+    w <- d[["n_total"]]
+    if (is.null(w) || all(is.na(w))) w <- rep(1, nrow(d))
+    avg <- function(x) stats::weighted.mean(x, w, na.rm = TRUE)
 
-    grade_bullets <- vapply(sort(unique(d_s[["GRADE"]])), function(g) {
-      d_g <- d_s |>
-        dplyr::filter(
-          if (is.na(g)) is.na(.data[["GRADE"]]) else .data[["GRADE"]] == g
-        )
-      g_lbl <- if (is.na(g)) "EOC" else paste0("Grade ", g)
-
-      yr_lines <- vapply(seq_len(nrow(d_g)), function(i) {
-        r      <- d_g[i, ]
-        cell_k <- paste0(r[["SUBJECT"]], "_", r[["GRADE"]], "_",
-                         r[["YEAR_1"]], "_", r[["YEAR_2"]])
-        flag_indicator <- if (cell_k %in% flag_keys) " (flagged)" else ""
-        sprintf(
-          "%s to %s%s: Up %.0f%%, Stable %.0f%%, Down %.0f%%",
-          r[["YEAR_1"]], r[["YEAR_2"]], flag_indicator,
-          r[["pct_up"]] * 100, r[["pct_stable"]] * 100,
-          r[["pct_down"]] * 100
-        )
-      }, character(1))
-
-      paste0("* ", g_lbl, ": ", paste(yr_lines, collapse = "; "))
-    }, character(1))
-
-    paste0("**", lbl, "**\n\n", paste(grade_bullets, collapse = "\n"))
+    line <- paste0(
+      "**", d[["subj_label"]][1L], ":** on average ", pct(avg(d[["pct_stable"]])),
+      " stayed at the same level, ", pct(avg(d[["pct_up"]])), " moved up, and ",
+      pct(avg(d[["pct_down"]])), " moved down."
+    )
+    if (nrow(d) > 1L) {
+      most_down <- d[which.max(d[["pct_down"]]), ]
+      most_up   <- d[which.max(d[["pct_up"]]), ]
+      line <- paste0(
+        line,
+        " Most downward: ", grade_years(most_down), " (",
+        pct(most_down[["pct_down"]]), " moved down).",
+        " Most upward: ", grade_years(most_up), " (",
+        pct(most_up[["pct_up"]]), " moved up)."
+      )
+    }
+    k <- if (s %in% names(n_flagged)) as.integer(n_flagged[[s]]) else 0L
+    if (k > 0L) {
+      line <- paste0(line, " ", k, " grade-year combination",
+                     if (k == 1L) " was" else "s were", " flagged as unusual.")
+    }
+    line
   }, character(1))
 
   narrative <- paste0(
-    "Achievement level transition summary ",
-    "(Up = moved to a higher level, Stable = stayed at same level, ",
-    "Down = moved to a lower level; flagged = normatively unusual):\n\n",
-    paste(by_subject, collapse = "\n\n")
+    "Movement between achievement levels for students matched from one year ",
+    "to the next:\n\n",
+    paste0("- ", by_subject, collapse = "\n")
   )
 
   list(narrative = narrative)

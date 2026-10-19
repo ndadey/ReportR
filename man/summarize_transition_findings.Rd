@@ -11,11 +11,14 @@ summarize_transition_findings(transition_data, assessment_spec, flags = NULL)
 
 \item{assessment_spec}{Named list describing the assessment program.}
 
-\item{flags}{Optional named list returned by \code{\link[=flag_transitions]{flag_transitions()}}. Year pairs
-in its \verb{$table} are marked "(flagged)" in the narrative. Default \code{NULL}.}
+\item{flags}{Optional named list returned by \code{\link[=flag_transitions]{flag_transitions()}}. When
+supplied, the number of flagged grade-year combinations is noted for each
+subject. Default \code{NULL}.}
 }
 \value{
-A named list with \verb{$narrative} (markdown character string).
+A named list with \verb{$narrative}: one markdown bullet per subject giving
+the average shares that stayed, moved up, and moved down, plus the most
+extreme grade-year combinations.
 }
 \description{
 Summarize achievement transition findings in plain text

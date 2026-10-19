@@ -410,21 +410,24 @@ plot_distributions <- function(distribution_table,
 
 #' Summarize distribution shape findings
 #'
-#' Returns a narrative, by-subject summary, and the full distribution table
-#' describing any unusual score distribution shapes detected.
+#' Returns a short narrative, by-subject counts, and the full distribution
+#' table. The narrative counts flagged cells by type and subject and names the
+#' subject-grades flagged in most years; individual cells are left to the table.
 #'
 #' @param distribution_table Data frame returned by [compute_distributions()].
+#' @param assessment_spec Optional named list describing the assessment
+#'   program, used for subject labels. Default `NULL` (subject codes are used).
 #'
 #' @return A named list with `$table` (the full distribution table),
 #'   `$by_subject` (flagged cell counts by SUBJECT and flag type), and
-#'   `$narrative` (character vector of 1–3 sentences).
+#'   `$narrative` (a short markdown paragraph).
 #' @export
 #' @examples
 #' \dontrun{
 #' tbl <- compute_distributions(demo_data, assessment_spec)
-#' summarize_distributions(tbl)
+#' summarize_distributions(tbl, assessment_spec)
 #' }
-summarize_distributions <- function(distribution_table) {
+summarize_distributions <- function(distribution_table, assessment_spec = NULL) {
   stopifnot(is.data.frame(distribution_table))
 
   empty_by_subject <- data.frame(
@@ -462,41 +465,59 @@ summarize_distributions <- function(distribution_table) {
     ))
   }
 
-  n_total   <- nrow(flagged)
-  n_bimodal <- sum(flagged$distribution_flag == "Bimodal", na.rm = TRUE)
-  n_skewed  <- sum(flagged$distribution_flag == "Skewed",  na.rm = TRUE)
-  n_flat    <- sum(flagged$distribution_flag == "Flat",    na.rm = TRUE)
+  labels <- vapply(assessment_spec$subjects, function(s) s$label, character(1))
+  flagged[["subj_label"]] <- ifelse(flagged[["SUBJECT"]] %in% names(labels),
+                                    labels[flagged[["SUBJECT"]]],
+                                    flagged[["SUBJECT"]])
 
-  sent1 <- sprintf(
-    "%d year-subject-grade combination%s showed unusual score distributions: ",
-    n_total, if (n_total == 1L) "" else "s"
+  n_cells <- sum(!is.na(distribution_table[["sd"]]))
+  type_n  <- table(tolower(flagged[["distribution_flag"]]))
+  subj_n  <- table(flagged[["subj_label"]])
+
+  all_same <- c(
+    if (length(type_n) == 1L) paste0("all ", names(type_n)),
+    if (length(subj_n) == 1L) paste0("all in ", names(subj_n))
   )
-  parts <- character(0)
-  if (n_bimodal > 0) parts <- c(parts, sprintf("%d Bimodal", n_bimodal))
-  if (n_skewed  > 0) parts <- c(parts, sprintf("%d Skewed",  n_skewed))
-  if (n_flat    > 0) parts <- c(parts, sprintf("%d Flat",    n_flat))
-  sent1 <- paste0(sent1, paste(parts, collapse = ", "), ".")
-
-  # Sentence 2 — list the flagged cells
-  cell_lbls <- flagged |>
-    dplyr::mutate(
-      lbl = paste0(
-        .data[["SUBJECT"]], " Grade ", .data[["GRADE"]],
-        " (", as.integer(.data[["YEAR"]]), "): ",
-        .data[["distribution_flag"]], " \u2014 ", .data[["flag_reason"]]
-      )
-    ) |>
-    dplyr::pull("lbl")
-
-  sent2 <- paste0(
-    "Flagged combinations: ",
-    paste(cell_lbls, collapse = "; "), "."
+  narrative <- paste0(
+    nrow(flagged), " of ", n_cells,
+    " year-subject-grade combinations had unusual score distributions",
+    if (length(all_same) > 0L) paste0(", ", paste(all_same, collapse = " and ")),
+    "."
   )
+  if (length(type_n) > 1L) {
+    narrative <- paste0(narrative, " By type: ",
+                        .oxford(paste(type_n, names(type_n))), ".")
+  }
+  if (length(subj_n) > 1L) {
+    narrative <- paste0(narrative, " By subject: ",
+                        .oxford(paste(names(subj_n), subj_n)), ".")
+  }
+
+  # Subject-grades flagged in most years point to a lasting pattern.
+  n_years <- dplyr::n_distinct(
+    distribution_table[["YEAR"]][!is.na(distribution_table[["sd"]])]
+  )
+  if (n_years >= 3L) {
+    min_years  <- ceiling(0.75 * n_years)
+    persistent <- flagged |>
+      dplyr::count(.data[["subj_label"]], .data[["GRADE"]],
+                   name = "years_flagged") |>
+      dplyr::filter(.data[["years_flagged"]] >= min_years)
+    if (nrow(persistent) > 0L) {
+      where <- vapply(split(persistent, persistent[["subj_label"]]), function(p) {
+        grades <- sort(p[["GRADE"]])
+        if (length(grades) == 0L) p[["subj_label"]][1L] else
+          paste0(p[["subj_label"]][1L], " ", .grades_phrase(grades))
+      }, character(1))
+      narrative <- paste0(narrative, " Flagged in at least ", min_years, " of ",
+                          n_years, " years: ", .oxford(where, sep = "; "), ".")
+    }
+  }
 
   list(
     table      = distribution_table,
     by_subject = by_subject,
-    narrative  = c(sent1, sent2)
+    narrative  = narrative
   )
 }
 
@@ -524,6 +545,6 @@ run_distributions <- function(student_results_long,
   list(
     table = tbl,
     plot  = plot_distributions(tbl, student_results_long, assessment_spec),
-    text  = summarize_distributions(tbl)
+    text  = summarize_distributions(tbl, assessment_spec)
   )
 }

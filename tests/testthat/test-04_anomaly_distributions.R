@@ -56,3 +56,37 @@ test_that("flags do not require score ranges in the spec", {
     compute_distributions(make_distributions_data(), make_distributions_spec())
   )
 })
+
+make_flagged_distribution_table <- function() {
+  data.frame(
+    YEAR    = rep(2020:2024, times = 2),
+    SUBJECT = rep(c("READ", "MATH"), each = 5),
+    GRADE   = 4L,
+    n       = 500L,
+    sd      = 40,
+    skewness = c(-1.4, -1.3, -1.2, -1.5, 0.1, 0.0, 0.1, -1.2, 0.2, 0.1),
+    kurtosis = 1,
+    bimodality_coefficient = 0.3,
+    distribution_flag = c(rep("Skewed", 4), "None", "None", "None", "Skewed",
+                          "None", "None"),
+    stringsAsFactors = FALSE
+  )
+}
+
+test_that("the distribution narrative counts flags and names lasting patterns", {
+  spec <- list(subjects = list(
+    READ = list(label = "Reading",     grades = 4L),
+    MATH = list(label = "Mathematics", grades = 4L)
+  ))
+  txt <- summarize_distributions(make_flagged_distribution_table(), spec)$narrative
+  expect_match(txt, paste0("5 of 10 year-subject-grade combinations had unusual ",
+                           "score distributions, all skewed."), fixed = TRUE)
+  expect_match(txt, "By subject: Mathematics 1 and Reading 4.", fixed = TRUE)
+  expect_match(txt, "Flagged in at least 4 of 5 years: Reading grade 4.",
+               fixed = TRUE)
+})
+
+test_that("the distribution narrative falls back to subject codes", {
+  txt <- summarize_distributions(make_flagged_distribution_table())$narrative
+  expect_match(txt, "By subject: MATH 1 and READ 4.", fixed = TRUE)
+})

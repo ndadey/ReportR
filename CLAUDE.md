@@ -54,6 +54,7 @@ devtools::install_github("ndadey/ReportR")
 | `R/setup_format_data.R` | ✅ Complete | `standardize_student_results()` — handles `YYYY_YYYY` year format |
 | `R/spec_helpers.R` | ✅ Complete | `get_score_spec()`, `build_loss_hoss_lookup()`, `benchmark_index()`, `join_score_bounds()` |
 | `R/utils.R` | ✅ Complete | `grade_key()` |
+| `R/utils_narrative.R` | ✅ Complete | Internal helpers for short narratives: `.change_summary()`, `.top_items_sentence()`, `.oxford()`, grade phrases (see Section 11) |
 | `R/export_tables.R` | ✅ Complete | `export_tables_to_excel()` — exported helper that writes every data frame in a results list to xlsx |
 | `R/student_results_long.R` | ✅ Complete | roxygen-only doc page for the `student_results_long` data contract |
 | `R/globals.R` | ✅ Complete | All NSE variable declarations; `@importFrom rlang .data :=` |
@@ -445,7 +446,14 @@ Returns `general_trend_results` with sub-lists:
 - `$matrices$plot$heatmap` — named list by SUBJECT
 - `$matrices$plot$alluvial` — named list by SUBJECT_Grade (requires `ggalluvial`)
 - `$matrices$plot$rates` — single dot chart of transition rates
-- `$flags$table`, `$flags$narrative` — normative z-score flags (threshold: `flag_sd`)
+- `$flags$table`, `$flags$table_cells`, `$flags$narrative` — flags compare each
+  subject × grade × year pair with the **same subject and grade's other year pairs**
+  (leave-one-out mean). The difference is divided by the SD of such differences
+  pooled across all subjects and grades (per rate for up/stable/down; per from→to
+  type for cells), and flagged beyond `flag_sd`. Pooling is required: with only a few
+  year pairs per grade, a z-score within one grade cannot exceed (n−1)/√n (1.5 for 4
+  pairs). `typical_*` and `mean_prop` hold the other-years values; cell flags are
+  sorted by size of difference.
 - `$comparisons$correlations`, `$comparisons$divergences` — link to score/proficiency trends
 
 **Transition matching is cohort-style**: Grade G in year T → Grade G+1 in year T+1 (same
@@ -788,6 +796,7 @@ ReportR/
 │   ├── setup_format_data.R               ← standardize_student_results()
 │   ├── student_results_long.R            ← roxygen doc page for the data contract
 │   ├── utils.R                           ← grade_key()
+│   ├── utils_narrative.R                 ← internal helpers for short narratives
 │   ├── spec_helpers.R                    ← get_score_spec(), build_loss_hoss_lookup(),
 │   │                                        benchmark_index(), join_score_bounds()
 │   ├── export_tables.R                   ← export_tables_to_excel()
@@ -858,6 +867,9 @@ ReportR/
 │   ├── test-01_trend_enrollment.R        ← 59 tests for Line 1.2 functions ✅
 │   ├── test-04_anomaly_distributions.R   ← distribution shape flags (synthetic shapes)
 │   ├── test-export_tables.R              ← sheet naming, dedupe, Excel export
+│   ├── test-01_trend_transitions.R       ← within subject×grade flags, summary narrative
+│   ├── test-01_general_cohort.R          ← enrollment diagnostics narrative
+│   ├── test-utils_narrative.R            ← narrative helpers (exact wording)
 │   └── test-spec_helpers.R               ← get_score_spec(), build_loss_hoss_lookup(),
 │                                            join_score_bounds() (EOC handling)
 └── dev/                                  ← not in git or package (excluded by both)
@@ -928,6 +940,23 @@ For density plots specifically: use `stats::density(x, n = 512L)` to pre-compute
 data and pass the 512-row data frame to ggplot instead of raw student scores. Examples:
 - `.build_lh_density_plot()` in `04_anomaly_loss_hoss.R`
 - `.build_flagged_density_plot()` in `04_anomaly_distributions.R`
+
+### Narratives
+
+`$narrative` text is printed verbatim in reports, so it must read as a summary, not as
+a table written out in prose:
+- **Lead with the finding**, in two or three short sentences (or one bullet) per
+  subject: what changed overall and the biggest movers. E.g. "**Mathematics:** up in
+  5 of 8 grades, most in grade 4 (+11.1 points); down in grades 3 and 5 …".
+- **Never enumerate every cell.** For flags, state the count, then name at most the 3
+  largest (sorted by size) with `.top_items_sentence()`. Full detail belongs in a
+  table printed next to the narrative in the report (add one if none exists).
+- **Don't point to "the table below" for the full list:** report tables are filtered
+  to `report_years`, while narratives cover every analyzed year.
+- Use subject labels from the spec, not codes; `grade 4` in prose; a true minus sign
+  via `.fmt_signed()`; American English; no arrows.
+- Build phrases with the helpers in `R/utils_narrative.R` (`.change_summary()`,
+  `.grade_count_phrase()`, `.oxford()`, `.place_label()`) so wording stays consistent.
 
 ### roxygen2 Documentation
 Every exported function needs:
@@ -1144,5 +1173,7 @@ test_data <- do.call(rbind, lapply(c("ELA", "MATHEMATICS"), function(s) {
     (this happened to `plot_distributions()` and `plot_loss_hoss_distributions()`).
     Define `.build_*` helpers above the roxygen block.
 30. **Only ASCII in R code.** Write non-ASCII characters in strings as escapes
-    (`"→"` for →, `"–"` for –, `"±"` for ±); R CMD check warns
-    otherwise. Comments and roxygen text may contain UTF-8.
+    (`"\u2192"` for →, `"\u2013"` for –, `"\u00b1"` for ±); R CMD check warns
+    otherwise. Comments and roxygen text may contain UTF-8. Editing tools can
+    silently turn a typed `\u2212` escape into the literal character, so
+    after editing strings, re-check with `tools::showNonASCIIfile()` or `devtools::check()`.

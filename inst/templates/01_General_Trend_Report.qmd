@@ -247,6 +247,33 @@ for (subj in names(density_plots)) {
 cat(general_trend_results$achievement_transitions$text$narrative)
 ```
 
+```{r transition-summary-table, tab.cap="Percent of Matched Students Moving Up, Staying, or Moving Down a Level by Subject, Grade, and Year Pair"}
+trans_sum <- general_trend_results$achievement_transitions$matrices$summary_table
+if (!is.null(report_years) && !is.null(trans_sum)) {
+  trans_sum <- trans_sum |> dplyr::filter(.data[["YEAR_2"]] %in% report_years)
+}
+if (!is.null(trans_sum) && nrow(trans_sum) > 0) {
+  subj_labels <- vapply(assessment_spec$subjects, function(s) s$label, character(1))
+  trans_sum |>
+    dplyr::arrange(.data[["SUBJECT"]], .data[["GRADE"]], .data[["YEAR_1"]]) |>
+    dplyr::transmute(
+      Subject    = dplyr::coalesce(unname(subj_labels[.data[["SUBJECT"]]]),
+                                   .data[["SUBJECT"]]),
+      Grade      = dplyr::if_else(is.na(.data[["GRADE"]]), "EOC",
+                                  as.character(.data[["GRADE"]])),
+      Years      = paste0(.data[["YEAR_1"]], "–", .data[["YEAR_2"]]),
+      `% Up`     = round(100 * .data[["up"]], 1),
+      `% Stable` = round(100 * .data[["stable"]], 1),
+      `% Down`   = round(100 * .data[["down"]], 1)
+    ) |>
+    flextable::flextable() |>
+    flextable::merge_v(j = c("Subject", "Grade")) |>
+    flextable::bold(part = "header") |>
+    flextable::fontsize(size = 9, part = "all") |>
+    flextable::set_table_properties(layout = "autofit", width = 1)
+}
+```
+
 ### Transition Rates
 
 ```{r transition-rates-plot, fig.width=9, fig.height=5}
@@ -271,6 +298,8 @@ if (!is.null(flags_tbl) && nrow(flags_tbl) > 0) {
       dplyr::select(subj_label, grade_lbl, YEAR_1, YEAR_2,
                     pct_up, pct_stable, pct_down, flag_type) |>
       dplyr::mutate(
+        YEAR_1     = as.character(YEAR_1),
+        YEAR_2     = as.character(YEAR_2),
         pct_up     = round(pct_up     * 100, 1),
         pct_stable = round(pct_stable * 100, 1),
         pct_down   = round(pct_down   * 100, 1)
@@ -298,13 +327,15 @@ if (!is.null(cell_flags) && nrow(cell_flags) > 0) {
       dplyr::select(subj_label, grade_lbl, YEAR_1, YEAR_2,
                     from_level, to_level, prop, mean_prop, flag_dir) |>
       dplyr::mutate(
+        YEAR_1    = as.character(YEAR_1),
+        YEAR_2    = as.character(YEAR_2),
         prop      = round(prop      * 100, 1),
         mean_prop = round(mean_prop * 100, 1)
       ) |>
       dplyr::rename(`Subject` = subj_label, `Grade` = grade_lbl,
                     `Year 1` = YEAR_1, `Year 2` = YEAR_2,
                     `From Level` = from_level, `To Level` = to_level,
-                    `% Observed` = prop, `% Typical` = mean_prop,
+                    `% Observed` = prop, `% Other Years` = mean_prop,
                     `Flag` = flag_dir)
   ) |>
     flextable::bold(part = "header") |>

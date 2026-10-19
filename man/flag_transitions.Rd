@@ -2,7 +2,7 @@
 % Please edit documentation in R/01_trend_transitions.R
 \name{flag_transitions}
 \alias{flag_transitions}
-\title{Flag normatively large achievement level transitions}
+\title{Flag unusual achievement level transitions}
 \usage{
 flag_transitions(transition_data, assessment_spec, flag_sd = 1.5)
 }
@@ -17,12 +17,20 @@ flag_transitions(transition_data, assessment_spec, flag_sd = 1.5)
 \value{
 A named list:
 \itemize{
-\item \verb{$table}     — flagged cells with z-scores and annotations
-\item \verb{$narrative} — markdown summary of flags
+\item \verb{$table} — flagged subject x grade x year pairs, with observed
+(\verb{pct_*}) and typical (\verb{typical_*}) rates, z-scores, and annotations
+\item \verb{$table_cells} — flagged from-to level shares; \code{mean_prop} is the typical
+share in the same subject and grade's other year pairs
+\item \verb{$narrative} — markdown summary naming the largest flags
 }
 }
 \description{
-Computes z-scores for \code{total_transition_rate} and \code{net_upward_rate} across
-all SUBJECT × GRADE × year-pair cells and flags those beyond \code{flag_sd}
-standard deviations. Generates a plain-language annotation for each flag.
+Compares each subject x grade x year pair with the same subject and grade's
+other year pairs. For each rate (up, stable, down) and each from-to level
+share, the difference from the other years' average is divided by the
+standard deviation of such differences across all subjects and grades, and
+differences beyond \code{flag_sd} are flagged. Comparing within subject and grade
+keeps stable differences between grades from being flagged every year;
+pooling the standard deviation keeps the test usable with only a few year
+pairs.
 }
