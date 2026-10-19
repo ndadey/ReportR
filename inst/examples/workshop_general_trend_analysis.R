@@ -6,13 +6,9 @@
 #
 # Requirements:
 #   install.packages("devtools")
-#   devtools::install_github("ndadey/ReportR", ref = "integrate-general-trend")
+#   devtools::install_github("ndadey/ReportR")
 #   install.packages("SGPdata")
 #   install.packages("quarto")
-#
-# Note: once the integrate-general-trend branch is merged into main, the
-# ref argument can be dropped:
-#   devtools::install_github("ndadey/ReportR")
 # =============================================================================
 
 
@@ -70,9 +66,6 @@ assessment_spec$achievement_levels$policy_benchmark
 #
 # report_years filters to a subset of years (NULL = use all years in the data)
 
-devtools::load_all("C:/Users/NathanDadey/CenterforAssessment Dropbox/Nathan Dadey/Git/ReportR")
-#system.file("specs/00_DEMO_Assessment_Spec.R", package = "ReportR"))
-#source("run_general_trend_analysis.R")
 general_trend_results <- run_general_trend_analysis(
   student_results_long = student_results_long,
   assessment_spec      = assessment_spec,

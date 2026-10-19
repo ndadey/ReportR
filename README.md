@@ -249,16 +249,19 @@ ReportR/
 │   │   ├── 01_General_Cohort_Report.qmd
 │   │   ├── 04_Anomaly_Report.qmd
 │   │   └── 05_Aggregate_Analysis_Report.qmd
-│   └── workshop/                       # Step-by-step driver scripts
+│   └── examples/                       # Step-by-step walkthroughs on SGPdata demo data
 │       ├── workshop_anomaly_analysis.R
-│       ├── workshop_general_trend_analysis.R
-│       ├── MS_workshop_general_trend_analysis_V2.R
-│       ├── MS_workshop_general_cohort_analysis.R
-│       ├── MS_workshop_enrollment_analysis.R
-│       ├── MS_workshop_aggregate_analysis.R
-│       └── MS_workshop_anomaly_analysis.R
+│       └── workshop_general_trend_analysis.R
+├── run/                                # Not installed with the package
+│   └── run_state.R                     # Builds results lists for a state; renders reports
+├── internal/                           # Not installed with the package
+│   └── workshop_archive/               # Superseded state-specific driver scripts
+├── states/                             # Per-state config + data loaders (mostly gitignored)
 └── tests/testthat/                     # Unit tests
 ```
+
+The demo walkthroughs are installed with the package; find them with
+`system.file("examples", package = "ReportR")`.
 
 ## License
 

@@ -104,21 +104,6 @@ file.copy(
 # spec_file points to the assessment spec.
 # results_file points to the saved RDS from Step 2.
 
-for(i in school.list){
-  quarto::quarto_render(
-    input         = "04_Anomaly_Report.qmd",
-    #"inst/templates/04_Anomaly_Report.qmd",
-    output_format = "html", #"docx",
-    output_file   = "04_Anomaly_Report.html",
-    execute_params = list(
-      pkg_path     = find.package("ReportR"),
-      spec_file    = system.file("specs/00_DEMO_Assessment_Spec.R",
-                                 package = "ReportR"),
-      results_file = file.path(getwd(), paste0("output/", i,".rds")),
-      min_n        = 10L
-    )
-
-}
 quarto::quarto_render(
   input         = "04_Anomaly_Report.qmd",
                   #"inst/templates/04_Anomaly_Report.qmd",

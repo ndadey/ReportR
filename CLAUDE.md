@@ -26,6 +26,12 @@ The package is built around four **lines of analysis**:
 Each line of analysis follows the same three-step workflow:
 **Setup → Modular Analysis → Report**
 
+**Package family context:** `ARCHITECTURE.md` (repo root) describes the planned `stateR`
+family, in which this package is slated to be renamed `stateSummative`
+(`[PROPOSED — CONFIRM]`) alongside `stateSpecs`, `stateELP`, and others. Read it before
+any structural change. Do **not** rename the package, move functions between packages,
+or adopt the family naming until the user confirms.
+
 ---
 
 ## 2. Current Package State
@@ -45,8 +51,10 @@ devtools::install_github("ndadey/ReportR")
 | File | Status | Notes |
 |---|---|---|
 | `R/setup_format_data.R` | ✅ Complete | `standardize_student_results()` — handles `YYYY_YYYY` year format |
-| `R/spec_helpers.R` | ✅ Complete | `get_score_spec()`, `build_loss_hoss_lookup()`, `benchmark_index()` |
+| `R/spec_helpers.R` | ✅ Complete | `get_score_spec()`, `build_loss_hoss_lookup()`, `benchmark_index()`, `join_score_bounds()` |
 | `R/utils.R` | ✅ Complete | `grade_key()` |
+| `R/export_tables.R` | ✅ Complete | `export_tables_to_excel()` — exported helper that writes every data frame in a results list to xlsx |
+| `R/student_results_long.R` | ✅ Complete | roxygen-only doc page for the `student_results_long` data contract |
 | `R/globals.R` | ✅ Complete | All NSE variable declarations; `@importFrom rlang .data :=` |
 | `R/run_anomaly_analysis.R` | ✅ Complete | Orchestrator for all five Line 4 sub-analyses |
 | `R/04_anomaly_loss_hoss.R` | ✅ Complete | HOSS/LOSS pileup detection |
@@ -65,25 +73,23 @@ devtools::install_github("ndadey/ReportR")
 | `inst/specs/00_AR_Assessment_Spec.R` | ✅ Complete | Arkansas ATLAS (4 levels) — nested scale_scores structure |
 | `inst/specs/00_DEMO_Assessment_Spec.R` | ✅ Complete | SGPdata demo (4 levels) — nested scale_scores structure |
 | `inst/specs/00_TEMPLATE_Spec.R` | ✅ Complete | Blank template for new states |
-| `inst/workshop/workshop_anomaly_analysis.R` | ✅ Complete | Step-by-step workshop script for Line 4 (demo data) |
-| `inst/workshop/workshop_general_trend_analysis.R` | ✅ Complete | Step-by-step workshop script for Line 1 (demo data) |
-| `inst/workshop/MS_workshop_general_trend_analysis.R` | ✅ Complete | MS MAAP driver: runs both Line 1 and Line 4, renders both reports |
+| `inst/examples/workshop_anomaly_analysis.R` | ✅ Complete | Step-by-step walkthrough for Line 4 (demo data; installed with the package) |
+| `inst/examples/workshop_general_trend_analysis.R` | ✅ Complete | Step-by-step walkthrough for Line 1 (demo data; installed with the package) |
 | `R/01_general_cohort.R` | ✅ Complete | All Line 1.3 cohort compute/plot/summarize/run functions |
 | `R/run_general_cohort.R` | ✅ Complete | Line 1.3 orchestrator — saves RDS, renders report |
 | `inst/templates/01_General_Cohort_Report.qmd` | ✅ Complete | Full report template for Line 1.3 |
-| `inst/workshop/MS_workshop_general_cohort_analysis.R` | ✅ Complete | MS MAAP driver for Line 1.3 |
 | `R/utils_enrollment.R` | ✅ Complete | `suppress_small_n_enroll()` helper + Step 1 findings comment |
 | `R/01_trend_enrollment.R` | ✅ Complete | All Line 1.2 compute/plot/summarize/run functions |
 | `R/run_general_enrollment_analysis.R` | ✅ Complete | Line 1.2 orchestrator — returns `general_enrollment_results` |
 | `inst/templates/01_Enrollment_Trends_Report.qmd` | ✅ Complete | Full report template for Line 1.2 |
 | `inst/templates/01_Enrollment_Brief.qmd` | ✅ Complete | One-page brief template for Line 1.2 |
-| `inst/workshop/MS_workshop_enrollment_analysis.R` | ✅ Complete | MS MAAP driver for Line 1.2 |
 | `R/aggregate_helpers.R` | ✅ Complete | All five Line 5 compute_* functions |
 | `R/run_aggregate_analysis.R` | ✅ Complete | Line 5 orchestrator — returns `aggregate_results` |
 | `inst/templates/05_Aggregate_Analysis_Report.qmd` | ✅ Complete | Full report template for Line 5 (student_results_long sections) |
-| `inst/workshop/MS_workshop_aggregate_analysis.R` | ✅ Complete | MS MAAP driver for Line 5 |
-| `inst/workshop/run_state.R` | ✅ Complete | Generic single-state runner — set `STATE <- "AR"` etc. to switch states |
+| `run/run_state.R` | ✅ Complete | Generic single-state runner (not installed) — set `STATE <- "AR"` etc. to switch states; full xlsx export + re-export-only mode (see Section 3) |
+| `internal/workshop_archive/` | 🗄 Archived | Superseded per-line MS MAAP driver scripts (`MS_workshop_*.R`), replaced by `run/run_state.R`; not installed |
 | `README.md` | ✅ Complete | Install instructions, quick start, package overview |
+| `ARCHITECTURE.md` | 📝 Planning doc | `stateR` package-family architecture; contains `[PROPOSED — CONFIRM]` items |
 
 ### What is not yet built
 
@@ -118,12 +124,22 @@ Each `run_*_analysis()` orchestrator:
 - Narrative text is pulled from `$text$narrative` — never written inline in the `.qmd`
 
 ### Driver scripts
-- `inst/workshop/run_state.R` — **primary runner**: set `STATE` and `ANALYSES` at the top, sources `states/_config.R` automatically
-- `AR/AR_run_all.R` — AR master driver (all five lines); individual `AR/AR_run_*.R` scripts per line
-- `inst/workshop/MS_workshop_general_cohort_analysis.R` — MS MAAP driver for Line 1.3
-- `inst/workshop/MS_workshop_enrollment_analysis.R` — MS MAAP driver for Line 1.2
-- `inst/workshop/MS_workshop_aggregate_analysis.R` — MS MAAP driver for Line 5
-- Demo workshop scripts: `inst/workshop/workshop_anomaly_analysis.R` and `workshop_general_trend_analysis.R`
+- `run/run_state.R` — **the runner**: it builds the results list for each requested line,
+  saves the RDS, writes the xlsx, and renders the report. Edit the user-settings block
+  at the top, then source the file. It sources `states/_config.R` automatically.
+  Settings: `STATE`, `ANALYSES` (any of `"trend"`, `"enrollment"`, `"cohort"`,
+  `"anomaly"`, `"aggregate"`), `RENDER`, `MIN_N`, `REPORT_YEARS`, `RE_EXPORT_XLSX`,
+  `RE_EXPORT_LINES`.
+- Demo walkthroughs: `inst/examples/workshop_anomaly_analysis.R` and
+  `inst/examples/workshop_general_trend_analysis.R`. These are installed with the
+  package, so they must stay portable: use `library(ReportR)` and `system.file()`,
+  never a machine-specific path.
+
+**Folder roles:** `run/` holds scripts that build results lists; `internal/` holds
+internal and archived material. Both are tracked in git but excluded from the package
+build via `.Rbuildignore`. Only `inst/` is installed. Never put a script with a
+machine-specific path under `inst/`. `internal/workshop_archive/` holds the old per-line
+`MS_workshop_*.R` drivers; don't extend them — add new behavior to `run/run_state.R`.
 
 ### RDS + render pattern
 
@@ -143,6 +159,30 @@ quarto::quarto_render(input = qmd_local, ...,
 file.remove(qmd_local)
 ```
 
+`run_state.R`'s `.render_report()` copies the template from the **source tree**
+(`file.path(pkg_path, "inst", "templates", qmd_name)`) and falls back to
+`system.file()` only if that is missing, so template edits take effect without
+reinstalling the package.
+
+### Excel export (`run_state.R`)
+
+Each line writes `<line>_full.xlsx` (e.g. `general_trend_full.xlsx`) next to its RDS.
+`.collect_df_sheets()` walks the results list recursively and writes **every non-empty
+data frame** as its own sheet; ggplot objects and atomic values are skipped. Sheet
+names are the slot path joined with `.` and shortened to Excel's 31-character limit
+by `.shorten_sheet_name()`, which abbreviates segments via the `.seg_abbr` lookup
+(e.g. `achievement_transitions` → `ach_trans`) before left-truncating as a last
+resort. **When you add a results slot with a long name, add an entry to `.seg_abbr`**
+so its tab name stays readable.
+
+**Re-export without re-running analysis:** set `RE_EXPORT_XLSX <- TRUE` and
+`RE_EXPORT_LINES` to the line(s) wanted, then source the file. `run_state()` is
+skipped; the existing RDS files in the state's output directory are read and the
+xlsx files rewritten. The cohort RDS lives at `cohort/cohort_results.rds`.
+
+`R/export_tables.R` also exports `export_tables_to_excel()`, a package-level
+equivalent with `__`-joined sheet names; `run_state.R` does not use it.
+
 ---
 
 ## 4. QMD Params Pattern
@@ -153,7 +193,12 @@ params:
   spec_file:    null   # path to spec file, relative to pkg_path
   results_file: null   # absolute path to pre-computed RDS
   min_n:        10
+  report_years: null   # years shown in the main body; NULL = all years
 ```
+
+**`report_years`** restricts the years shown in the report's main sections; templates
+that use it note the historical years omitted. `run_state.R` passes `REPORT_YEARS`
+through to every render.
 
 **`pkg_path`** is a development-only workaround — `devtools::load_all(pkg_path)` needs
 to find `DESCRIPTION`. Once the package is installed by end users, the setup chunk
@@ -294,6 +339,13 @@ will return 0 rows. Correct order:
 data |> filter(VALID_CASE == "VALID_CASE") |> standardize_student_results() |> filter(YEAR %in% 2016:2019)
 ```
 
+**Renamed columns no longer exist after standardizing.** `standardize_student_results()`
+renames `CONTENT_AREA` → `SUBJECT` (and `SCHOOL_NUMBER`/`DISTRICT_NUMBER` →
+`SCHOOL_ID`/`DISTRICT_ID`). Any recoding or filtering in a state `_setup.R` that runs
+after the call must use the new names. `df$CONTENT_AREA` silently returns `NULL`, so a
+filter like `df[toupper(df$CONTENT_AREA) != "SCIENCE", ]` drops **every row** and
+later fails far downstream (e.g. a `facet_wrap` crash at report render time).
+
 ---
 
 ## 7. Line 4: Score Quality Analysis
@@ -368,7 +420,7 @@ Returns `general_trend_results` with sub-lists:
 
 ### `$proficiency` (`R/01_trend_proficiency.R`)
 - `$table` — long: YEAR × SUBJECT × GRADE, `n`, `n_proficient`, `pct_proficient`
-- `$plot$trend`, `$plot$heatmap`
+- `$plot$trend`, `$plot$heatmap` — both `NULL` when every `pct_proficient` is `NA`
 - `$text$narrative`, `$text$by_subject`, `$text$table`
 
 ### `$distributions` (`R/01_trend_distributions.R`)
@@ -387,6 +439,11 @@ Returns `general_trend_results` with sub-lists:
 
 **Transition matching is cohort-style**: Grade G in year T → Grade G+1 in year T+1 (same
 as correlations). EOC subjects matched on STUDENT_ID + SUBJECT only.
+
+Transitions need at least two years with non-NA `STUDENT_ID`; otherwise
+`compute_transitions()` returns `long_table`, `summary_table`, and `avg_matrices` as `NULL` and
+emits a message reporting how many years had matched records. `$matrices$summary_table` always carries `stable`, `up`, and
+`down` columns (filled with 0 when a direction never occurs).
 
 ---
 
@@ -641,6 +698,15 @@ if (nrow(plot_data) > 0) {
 }
 ```
 
+**Stored plots may be `NULL`.** Plot functions return `NULL` (or a list containing
+`NULL`s) when their input data is empty. Every chunk that prints a plot from the
+results object must guard it:
+
+```r
+p <- general_trend_results$proficiency$plot$trend
+if (!is.null(p)) print(p) else cat("*Proficiency trend data not available.*\n")
+```
+
 **Key QMD conventions for all templates:**
 - Setup chunk: conditional `devtools::load_all(pkg_path)` vs `library(ReportR)`
 - Subsequent chunks read only from the pre-computed results object
@@ -657,13 +723,22 @@ ReportR/
 ├── NAMESPACE
 ├── README.md
 ├── CLAUDE.md
-├── .Rbuildignore                          ← excludes dev/, MS/, .claude/, Word temp files
-├── .gitignore                             ← excludes dev/, MS/, *.docx, *.rds, *.csv, *.RData
+├── ARCHITECTURE.md                        ← stateR package-family plan (see Section 1)
+├── .Rbuildignore                          ← excludes dev/, MS/, run/, internal/, states/,
+│                                            internal_docs/, ARCHITECTURE.md, CLAUDE.md,
+│                                            .claude/, Word temp files. A built package
+│                                            contains only DESCRIPTION, LICENSE, NAMESPACE,
+│                                            R/, README.md, inst/, man/, tests/
+├── .gitignore                             ← excludes dev/, MS/, states/* (except DEMO + template),
+│                                            *.docx, *.xlsx, *.pdf, *.rds, *.csv, *.RData,
+│                                            *.html, *_files/ (rendered Quarto output)
 ├── R/
 │   ├── setup_format_data.R               ← standardize_student_results()
+│   ├── student_results_long.R            ← roxygen doc page for the data contract
 │   ├── utils.R                           ← grade_key()
 │   ├── spec_helpers.R                    ← get_score_spec(), build_loss_hoss_lookup(),
-│   │                                        benchmark_index()
+│   │                                        benchmark_index(), join_score_bounds()
+│   ├── export_tables.R                   ← export_tables_to_excel()
 │   ├── globals.R                         ← globalVariables() + @importFrom rlang .data :=
 │   ├── run_anomaly_analysis.R            ← Line 4 orchestrator
 │   ├── 04_anomaly_loss_hoss.R            ← loss_hoss sub-analysis ✅
@@ -696,36 +771,35 @@ ReportR/
 │   │   ├── 01_General_Cohort_Report.qmd  ← Line 1.3 report ✅
 │   │   ├── 01_Enrollment_Trends_Report.qmd ← Line 1.2 report ✅
 │   │   ├── 01_Enrollment_Brief.qmd       ← Line 1.2 one-page brief ✅
-│   │   └── 05_Aggregate_Analysis_Report.qmd ← Line 5 report ✅
-│   └── workshop/
-│       ├── run_state.R                             ← generic single-state runner ✅
-│       ├── workshop_anomaly_analysis.R             ← Line 4 demo data walkthrough
-│       ├── workshop_general_trend_analysis.R       ← Line 1 demo data walkthrough
-│       ├── MS_workshop_general_cohort_analysis.R   ← MS MAAP driver (Line 1.3)
-│       ├── MS_workshop_enrollment_analysis.R       ← MS MAAP driver (Line 1.2) ✅
-│       ├── MS_workshop_aggregate_analysis.R        ← MS MAAP driver (Line 5) ✅
-│       ├── MS_workshop_anomaly_analysis.R          ← MS MAAP driver (Line 4)
-│       └── Old/                                    ← archived originals
+│   │   ├── 05_Aggregate_Analysis_Report.qmd ← Line 5 report ✅
+│   │   └── old/                          ← archived templates (not used by runners)
+│   └── examples/                         ← installed; must stay portable
+│       ├── workshop_anomaly_analysis.R   ← Line 4 demo data walkthrough
+│       └── workshop_general_trend_analysis.R ← Line 1 demo data walkthrough
 │
-├── states/
+├── run/                                  ← in git, NOT installed (.Rbuildignore)
+│   └── run_state.R                       ← builds results lists, RDS, xlsx, reports ✅
+│
+├── internal/                             ← in git, NOT installed (.Rbuildignore)
+│   └── workshop_archive/                 ← superseded MS_workshop_*.R drivers, dated
+│                                            snapshots, Old/ — reference only
+│
+├── internal_docs/                        ← module build notes (NOTES-*.md); NOT installed
+│
+├── states/                               ← NOT installed (.Rbuildignore)
 │   ├── _config_template.R            ← skeleton; copy to _config.R locally and fill in paths
 │   ├── _config.R                     ← gitignored: maps state codes → spec/setup/output paths
 │   ├── DEMO/_setup.R                 ← portable SGPdata loader (committed)
 │   ├── MS/_setup.R                   ← gitignored: MS data loader + recoding
 │   └── AR/_setup.R                   ← gitignored: AR data loader + recoding
 │
-├── AR/                               ← Arkansas working directory (analogous to MS/)
-│   ├── 00_AR_setup.R                 ← data loader + column/level recoding
-│   ├── AR_run_all.R                  ← master driver (all five lines)
-│   ├── AR_run_trend.R  AR_run_enrollment.R  AR_run_cohort.R
-│   ├── AR_run_anomaly.R  AR_run_aggregate.R
-│   └── output/                       ← rendered reports + RDS (gitignored by extension)
-│
 ├── man/
 ├── tests/testthat/
 │   ├── test-04_anomaly_loss_hoss.R
 │   ├── test-01_trend_overall.R
-│   └── test-01_trend_enrollment.R        ← 59 tests for Line 1.2 functions ✅
+│   ├── test-01_trend_enrollment.R        ← 59 tests for Line 1.2 functions ✅
+│   └── test-spec_helpers.R               ← get_score_spec(), build_loss_hoss_lookup(),
+│                                            join_score_bounds() (EOC handling)
 └── dev/                                  ← not in git or package (excluded by both)
 ```
 
@@ -741,6 +815,15 @@ ReportR/
 - Do **not** use `isTRUE()` on a vector column — use `!is.na(x) & x` instead
 - Do **not** use `dplyr::if_else()` for scalar conditions inside loops — use base R `if/else`
 - Do **not** use `dplyr::recode(!!!list)` — use `left_join()` against a lookup data frame
+- After `tidyr::pivot_wider()`, do **not** assume a column exists for every category.
+  `values_fill` only fills cells in columns that were created; a category absent from
+  every row gets no column at all. Add expected columns explicitly before referencing them:
+
+  ```r
+  for (.col in c("stable", "up", "down")) {
+    if (!.col %in% names(wide)) wide[[.col]] <- 0
+  }
+  ```
 
 ### Function signatures
 - `compute_*()` — first two args: `student_results_long`, `assessment_spec`; optional
@@ -923,8 +1006,7 @@ test_data <- do.call(rbind, lapply(c("ELA", "MATHEMATICS"), function(s) {
 9b. **Per-state configuration:** `states/_config.R` (gitignored; copy from `states/_config_template.R`)
     maps state codes to spec path, setup script path, and output directory. `PKG_ROOT` is the only
     machine-specific path in the system. Per-state data-loading scripts (`states/{STATE}/_setup.R`)
-    are also gitignored; `states/DEMO/_setup.R` is committed and portable. The AR working directory
-    (`AR/`) uses `AR/00_AR_setup.R` directly rather than `states/AR/_setup.R`.
+    are also gitignored; `states/DEMO/_setup.R` is committed and portable.
 10. Save RDS directly to the output directory. Copy the QMD to the output directory before
     rendering (keeps Quarto's `_files/` out of the package source tree), then `file.remove()`
     the copied QMD after rendering. See Section 3 for the pattern.
@@ -963,3 +1045,16 @@ test_data <- do.call(rbind, lapply(c("ELA", "MATHEMATICS"), function(s) {
     and leaves `LOSS`/`HOSS` as `NA`, which silently disables the out-of-range, level-
     mismatch, and flat-distribution checks and crashes `stats::density(from = NA)`.
     Use `join_score_bounds()` (or `get_score_spec()` for one row). See Section 5.
+22. **Use post-standardization column names in state setup scripts.** After
+    `standardize_student_results()`, `CONTENT_AREA` is `SUBJECT` and
+    `SCHOOL_NUMBER`/`DISTRICT_NUMBER` are `SCHOOL_ID`/`DISTRICT_ID`. Referencing the old
+    name returns `NULL` and silently empties the data. See Section 6.
+23. **Guard every stored plot in a QMD** with `if (!is.null(p))` — plot slots are `NULL`
+    when there is no data. And guard every `facet_wrap` with a row-count check. See Section 9.
+24. **After `pivot_wider()`, add any expected-but-missing category columns** before using
+    them. See Section 11.
+25. **New results slots with long names** need an abbreviation in `.seg_abbr` in
+    `run/run_state.R` so their xlsx tab names stay readable. See Section 3.
+26. **Script placement:** scripts that build results lists go in `run/`; archived or
+    internal scripts go in `internal/`. Only portable code goes in `inst/`, since it is
+    installed with the package. See Section 3.

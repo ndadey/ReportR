@@ -8,6 +8,17 @@
 # Root-level run scripts (not part of the package)
 ^04_Anomaly_Analysis\.R$
 
+# Runner scripts and internal/archived driver scripts (tracked in git, not shipped)
+^run$
+^internal$
+
+# Per-state config and data loaders (gitignored files reference machine-local data)
+^states$
+
+# Internal planning and build notes
+^internal_docs$
+^ARCHITECTURE\.md$
+
 # Documentation
 ^CLAUDE\.md$
 
